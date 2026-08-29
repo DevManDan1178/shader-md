@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "build": "esbuild web/shaderRenderer.ts --bundle --format=iife --global-name=ShaderRenderer --outfile=generated/shaderRenderer.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.0.0"
+  }
+}
