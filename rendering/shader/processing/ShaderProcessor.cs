@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Playwright;
 
 namespace ShaderMarkdown.Rendering;
@@ -41,6 +42,8 @@ public class ShaderProcessor : IShaderProcessor {
         var result = await page.EvaluateAsync<byte[]>(
             """
             async (args) => {
+                args.parameters.shaderProperties = JSON.parse(args.parameters.shaderProperties);
+
                 return await ShaderRenderer.renderShader(args);
             }
             """,
@@ -49,7 +52,9 @@ public class ShaderProcessor : IShaderProcessor {
                 fragmentSource = source,
                 parameters = new {
                     time = (double) shaderInfo.ShaderParameters.Time,
-                    shaderProperties = shaderInfo.ShaderParameters.ShaderProperties,
+                    shaderProperties = JsonSerializer.Serialize(
+                        shaderInfo.ShaderParameters.ShaderProperties
+                    ),
                 }
             });
 
