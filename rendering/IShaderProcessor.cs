@@ -19,6 +19,7 @@ public interface IShaderProcessor {
             
         int frameCount = (int) (framesPerSecond * duration);
         byte[][] frames = new byte[frameCount][];
+        await LoadPageShaderScript(page);
         for (int frame = 0; frame < frameCount; ++frame) {
             float time = (float) frame / (float) framesPerSecond;
             var thisFrame = await ApplyAsync(page, image, shader, new ShaderParameters {
@@ -30,6 +31,7 @@ public interface IShaderProcessor {
         return frames;
     }
 
+    Task LoadPageShaderScript(IPage page);
     async Task<byte[][]> ApplyAnimatedToRectAsync(IPage page, int width, int height, string shader, int framesPerSecond, float duration, string color = "#FFFFFF") {
         if (width <= 0) {
             throw new ArgumentOutOfRangeException(nameof(width));
@@ -40,7 +42,6 @@ public interface IShaderProcessor {
         }
         
         using var image = new Image<Rgba32>(width, height);
-        Console.WriteLine($"Shader background color: '{color}'");
         var parsedColor = Color.ParseHex(color.Trim());
 
         image.Mutate(ctx => ctx.BackgroundColor(parsedColor));
