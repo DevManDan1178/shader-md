@@ -11,13 +11,14 @@
   <ItemGroup>
     <PackageReference Include="Markdig" Version="1.3.2" />
     <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.1.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="generated\shaderRenderer.js">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
+    <Content Include="generated\**\*.js">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+  </Content>
 
     <Content Include="shaders\**\*.frag">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
