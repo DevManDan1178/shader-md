@@ -1,21 +1,29 @@
-using System.Reflection.Metadata;
 using Microsoft.Playwright;
 
 namespace ShaderMarkdown.Rendering;
 
 /// <summary>
-/// Contains functions for processing shaders with HTML elements
+/// Contains functions for processing shaders with HTML elements.
 /// </summary>
 public class HTMLShaderProcessor {
-
     private readonly IShaderProcessor _shaderProcessor;
+
     public HTMLShaderProcessor(IShaderProcessor shaderProcessor) {
         _shaderProcessor = shaderProcessor;
     }
 
     const string SHADER_KEY = "shader";
     const string SHADER_BG_KEY = "shader-bg";
-    
+    const string IGNORE_PARENT_SHADERS_KEY = "ignoreParentShaders";
+    const bool DEFAULT_IGNORE_PARENT_SHADERS = true;
+    const string SHADER_OUTPUT_CLASSNAME = "shader-output";
+
+    private sealed class ElementInfo {
+        public int Idx { get; set; }
+        public string Id { get; set; } = "";
+        public int Depth { get; set; }
+    }
+
     /// <summary>
     /// Processes the elements of the page into different frames by increasing the time parameter of the shaders from 0 to 1
     ///
@@ -35,6 +43,7 @@ public class HTMLShaderProcessor {
     ///            Array<byte> (image data)
     ///        >
     ///     >,
+    /// backgroundElements?: IReadOnlyList<ILocator>,
     /// </returns>
     public async Task<(
         IReadOnlyList<byte[]>[] frames,
@@ -42,131 +51,144 @@ public class HTMLShaderProcessor {
         IReadOnlyList<byte[]>[]? backgroundFrames,
         IReadOnlyList<ILocator>? backgroundElements
     )> ProcessShadersAsync(IPage page, int fps = 30, float duration = 1f) {
-        var elements = page.Locator($"[{SHADER_KEY}]");
-        var backgrounds = page.Locator($"[{SHADER_BG_KEY}]");
-        int frameCount = (int)(fps * duration);
+        int frameCount = Math.Max(1, (int)(fps * duration));
 
-        List<ILocator> processedElements = new List<ILocator>();
-        List<byte[]>[] processedFrames = new List<byte[]>[frameCount];
+        var processedElements = new List<ILocator>();
+        var processedBackgroundElements = new List<ILocator>();
+
+        var processedFrames = new List<byte[]>[frameCount];
+        var processedBackgroundFrames = new List<byte[]>[frameCount];
 
         for (int i = 0; i < frameCount; i++) {
             processedFrames[i] = new List<byte[]>();
-        }
-
-        // -----------------------
-        // Regular shader elements
-        // -----------------------
-
-        int elementCount = await elements.CountAsync();
-        for (int elementIdx = 0; elementIdx < elementCount; ++elementIdx) {
-            Console.WriteLine("Shaderizing element " + (elementIdx + 1).ToString() + " of " + elementCount.ToString());
-
-            var element = elements.Nth(elementIdx);
-            var shader = await element.GetAttributeAsync(SHADER_KEY);
-
-            if (string.IsNullOrWhiteSpace(shader)) {
-                continue;
-            }
-
-            var screenshot = await element.ScreenshotAsync(new() {
-                Type = ScreenshotType.Png,
-                OmitBackground = true,
-            });
-
-            var frames = await _shaderProcessor.ApplyAnimatedAsync(
-                page,
-                screenshot,
-                shader,
-                fps,
-                duration
-            );
-
-            for (int frameIdx = 0; frameIdx < frameCount; ++frameIdx) {
-                processedFrames[frameIdx].Add(frames[frameIdx]);
-            }
-
-            var id = $"shader-source-{elementIdx}";
-
-            await element.EvaluateAsync("(element, id) => element.id = id", id);
-
-            processedElements.Add(page.Locator($"#{id}"));
-        }
-
-        // -------------------------
-        // Background shader elements
-        // -------------------------
-
-        int backgroundCount = await backgrounds.CountAsync();
-
-        if (backgroundCount == 0) {
-            return (processedFrames, processedElements, null, null);
-        }
-
-        List<ILocator> processedBackgroundElements = new();
-        List<byte[]>[] processedBackgroundFrames = new List<byte[]>[frameCount];
-
-        for (int i = 0; i < frameCount; i++) {
             processedBackgroundFrames[i] = new List<byte[]>();
         }
 
-        for (int bgIndex = 0; bgIndex < backgroundCount; ++bgIndex) {
-            Console.WriteLine($"Shaderizing background {bgIndex + 1} of {backgroundCount}");
+        var shaderIds = await page.EvaluateAsync<ElementInfo[]>(
+            """
+            () => DocumentFunctions.getShadersDeepestFirst()
+            """
+        );
+        Console.WriteLine($"Found {shaderIds.Length} {SHADER_KEY}/{SHADER_BG_KEY}/{IGNORE_PARENT_SHADERS_KEY} elements.");
 
-            var background = backgrounds.Nth(bgIndex);
+        await CreateShaderLayerContainersAsync(page);
 
-            var shader = await background.GetAttributeAsync(SHADER_BG_KEY);
+        foreach (var idInfo in shaderIds) {
+            string id = idInfo.Id;
+            Console.WriteLine($"Shaderizing element {(idInfo.Idx + 1)} of {shaderIds.Length}.");
 
-            if (string.IsNullOrWhiteSpace(shader)) {
-                continue;
-            }
+            var element = page.Locator($"#{id}");
+            var shader = await element.GetAttributeAsync(SHADER_KEY);
+            var shaderBg = await element.GetAttributeAsync(SHADER_BG_KEY);
 
-            var box = await background.BoundingBoxAsync();
+            if (!string.IsNullOrWhiteSpace(shaderBg)) {
+                var box = await element.BoundingBoxAsync();
 
-            if (box == null) {
-                continue;
-            }
+                if (box != null) {
+                    int bgWidth = Math.Max(1, (int)Math.Ceiling(box.Width));
+                    int bgHeight = Math.Max(1, (int)Math.Ceiling(box.Height));
 
-            int width = Math.Max(1, (int)Math.Ceiling(box.Width));
+                    var frames = await _shaderProcessor.ApplyAnimatedToRectAsync(page, bgWidth, bgHeight, shaderBg, fps, duration);
 
-            int height = Math.Max(1, (int)Math.Ceiling(box.Height));
-
-            var frames = await _shaderProcessor.ApplyAnimatedToRectAsync(
-                page,
-                width,
-                height,
-                shader,
-                fps,
-                duration
-            );
-
-            for (int frameIdx = 0; frameIdx < frameCount; ++frameIdx) {
-                processedBackgroundFrames[frameIdx].Add(frames[frameIdx]);
-            }
-
-            // Actual image that will sit behind
-            var imageId = $"shader-bg-{bgIndex}";
-            var createElementBackgroundScript = await File.ReadAllTextAsync(FilePaths.WebScriptPaths.CREATE_ELEMENT_BACKGROUND);
-
-            await page.AddScriptTagAsync(new() {
-                Content = createElementBackgroundScript
-            });
-            await background.EvaluateAsync<string>(
-                """
-                    (element, id) => {
-                        CreateElementBackground.createElementBackground(element, id);
+                    for (int frameIdx = 0; frameIdx < frameCount; frameIdx++) {
+                        processedBackgroundFrames[frameIdx].Add(frames[frameIdx]);
                     }
-                """,
-                imageId
-            );
 
-            processedBackgroundElements.Add(page.Locator($"#{imageId}"));
+                    var backgroundLayer = await CreateShaderLayerAsync(element, frames[0], idInfo.Depth, background: true);
+                    processedBackgroundElements.Add(backgroundLayer);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(shader)) {
+                var screenshot = await ScreenshotForShaderAsync(element);
+                var frames = await _shaderProcessor.ApplyAnimatedAsync(page, screenshot, shader, fps, duration);
+
+                for (int frameIdx = 0; frameIdx < frameCount; frameIdx++) {
+                    processedFrames[frameIdx].Add(frames[frameIdx]);
+                }
+
+                var shaderLayer = await CreateShaderLayerAsync(element, frames[0], idInfo.Depth, background: false);
+                processedElements.Add(shaderLayer);
+            }
+
+            if (!string.IsNullOrWhiteSpace(shader)) {
+                await element.EvaluateAsync(
+                    """
+                    element => DocumentFunctions.hideOriginalElement(element)
+                    """
+                );
+            }
         }
 
-        return (
-            processedFrames,
-            processedElements,
-            processedBackgroundFrames,
-            processedBackgroundElements
+        IReadOnlyList<byte[]>[]? backgroundFrames = processedBackgroundElements.Count > 0 ? processedBackgroundFrames : null;
+        IReadOnlyList<ILocator>? backgroundElements = processedBackgroundElements.Count > 0 ? processedBackgroundElements : null;
+
+        return (processedFrames, processedElements, backgroundFrames, backgroundElements);
+    }
+
+    private static async Task CreateShaderLayerContainersAsync(IPage page) {
+        await page.EvaluateAsync(
+            """
+            () => DocumentFunctions.createShaderLayerContainer()
+            """
         );
+    }
+
+    private static async Task<ILocator> CreateShaderLayerAsync(ILocator element, byte[] image, int depth, bool background) {
+        var base64 = Convert.ToBase64String(image);
+        var dataUrl = $"data:image/png;base64,{base64}";
+        var id = $"{SHADER_OUTPUT_CLASSNAME}-{Guid.NewGuid():N}";
+
+        await element.EvaluateAsync(
+            """
+                (element, args) => DocumentFunctions.createShaderLayer(element, args)
+            """,
+            new { id, dataUrl, depth, background }
+        );
+
+        return element.Page.Locator($"#{id}");
+    }
+
+    private static async Task<byte[]> ScreenshotForShaderAsync(ILocator element) {
+        var ignoredDescendants = await element.EvaluateAsync<string[]>(
+            """
+            element => DocumentFunctions.getScreenshotIgnoredDescendants(element)
+            """
+        );
+
+        if (ignoredDescendants.Length == 0) {
+            return await element.ScreenshotAsync(new() {
+                Type = ScreenshotType.Png,
+                OmitBackground = true,
+            });
+        }
+
+        /*
+            Hide overlay layers sourced from ignored descendants, and hide the descendants themselves
+            (covers ignoreParentShaders-only elements with no shader of their own, which don't get an overlay layer)
+        */
+        var hiddenCount = await element.Page.EvaluateAsync<int>(
+            """
+            ids => DocumentFunctions.hideShaderLayers(ids)
+            """,
+            ignoredDescendants
+        );
+
+        try {
+            // OmitBackground makes the hidden descendant areas (and their shader layers) transparent, leaving holes where ignored descendants exist.
+            return await element.ScreenshotAsync(new() {
+                Type = ScreenshotType.Png,
+                OmitBackground = true,
+            });
+        } finally {
+            if (hiddenCount > 0) {
+                await element.Page.EvaluateAsync(
+                    """
+                    ids => DocumentFunctions.showShaderLayers(ids)
+                    """,
+                    ignoredDescendants
+                );
+            }
+        }
     }
 }
