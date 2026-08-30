@@ -1,6 +1,9 @@
 export interface ShaderRenderArgs {
     imageBase64: string;
     fragmentSource: string;
+    parameters: {
+        time: number;
+    };
 }
 
 
@@ -30,7 +33,7 @@ const identityVertexShader : string = (
 );
 
 export async function renderShader(args: ShaderRenderArgs): Promise<number[]> {
-    const { imageBase64, fragmentSource } = args;
+    const { imageBase64, fragmentSource, parameters } = args;
     const image = new Image();
 
     image.src = "data:image/png;base64," + imageBase64;
@@ -63,8 +66,6 @@ export async function renderShader(args: ShaderRenderArgs): Promise<number[]> {
             throw new Error(`${name} shader source is undefined.`);
         }
 
-        console.log(`Compiling ${name} shader:`, source.substring(0, 200));
-
         const shader = gl!.createShader(type);
 
         if (!shader) {
@@ -85,8 +86,6 @@ export async function renderShader(args: ShaderRenderArgs): Promise<number[]> {
                 `Source:\n${source}`
             );
         }
-
-        console.log(`${name} shader compiled successfully.`);
 
         return shader;
     }
@@ -222,9 +221,12 @@ export async function renderShader(args: ShaderRenderArgs): Promise<number[]> {
     // ----------------------------------------
 
     const timeLocation = gl.getUniformLocation(program, "uTime");
-
-    if (timeLocation) {
-        gl.uniform1f(timeLocation, 0.0);
+    
+    if (timeLocation !== null) {
+        gl.uniform1f(timeLocation, parameters.time);
+    }
+    if (gl.getError() != 0) {
+        console.log("GL error:", gl.getError());
     }
 
     // ----------------------------------------
