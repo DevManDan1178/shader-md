@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using ShaderMarkdown.HTML;
 
 namespace ShaderMarkdown.Rendering;
 
@@ -14,10 +15,7 @@ public class HtmlRenderer {
 
     private const string DOCUMENT_BACKGROUND_ID = "document-background";
 
-    private struct DocumentSize {
-        public int Width;
-        public int Height;
-    }
+    
     private readonly IShaderProcessor _shaderProcessor;
     private readonly HTMLShaderProcessor _htmlShaderProcessor;
     public HtmlRenderer(IShaderProcessor shaderProcessor) {
@@ -48,32 +46,29 @@ public class HtmlRenderer {
             DeviceScaleFactor = scale
         });
 
+        await HTMLDocument.LoadPageDocumentFunctions(page);
+
         /* print browser logs on console?
         page.Console += (_, msg) =>
         {
             Console.WriteLine($"[Browser] {msg.Type}: {msg.Text}");
         };
         */
-        var createDocumentScript = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "generated", "CreateDocument.js"));
-
-        await page.AddScriptTagAsync(new() {
-            Content = createDocumentScript
-        });
 
         var fullHtml = await page.EvaluateAsync<string>(
             """
-                html => CreateDocument.createDocument(html)
+                html => DocumentFunctions.createDocument(html)
             """,
             html
         );
-
+        
         await page.SetContentAsync(fullHtml);
     
         await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
         await page.EvaluateAsync("() => document.fonts.ready");
         
-        DocumentSize documentSize = await GetDocumentSizeAsync(page);
+        DocumentSize documentSize = await HTMLDocument.GetDocumentSizeAsync(page);
         Console.WriteLine($" Document size: {documentSize.Width}x{documentSize.Height}.");
 
         Console.WriteLine("Processing shaders.");
@@ -83,7 +78,7 @@ public class HtmlRenderer {
         byte[][]? documentBackgroundFrames = null;
         if (string.IsNullOrWhiteSpace(backgroundShader)) {
             Console.WriteLine("Setting page backgroun");
-            await SetPageBackgroundAsync(page, backgroundColor);
+            await HTMLDocument.SetPageBackgroundAsync(page, backgroundColor);
         } else {
             Console.WriteLine("Generating page background frames");
             documentBackgroundFrames = await GetDocumentBackgroundFrames(page, documentSize, fps, duration, backgroundColor, backgroundShader);
@@ -110,6 +105,7 @@ public class HtmlRenderer {
     private async Task<byte[][]> GetShaderizedDocumentFramesAsync(IPage page, byte[][] documentFrames, int fps, string shader) {
         byte[][] shaderizedDocumentFrames = new byte[documentFrames.Length][];
         float shaderTime = 0;
+        await _shaderProcessor.LoadPageShaderScript(page);
         for (int i = 0; i < documentFrames.Length; shaderTime += (float) i++/fps) {
             Console.WriteLine($"Shaderizing: document frame {i + 1} of {documentFrames.Length}.");
             shaderizedDocumentFrames[i] = await _shaderProcessor.ApplyAsync(page, documentFrames[i], shader, new ShaderParameters {
@@ -138,15 +134,11 @@ public class HtmlRenderer {
         );
 
         var dataUrl = $"data:image/png;base64,{Convert.ToBase64String(documentBackgroundFrames[0])}";
-        var createDocumentBackgroundScript = await File.ReadAllTextAsync(FilePaths.WebScriptPaths.CREATE_DOCUMENT_BACKGROUND);
 
-        await page.AddScriptTagAsync(new() {
-            Content = createDocumentBackgroundScript
-        });
         await page.EvaluateAsync<string>(
             """
                 ({ dataUrl, id, width, height }) => {
-                    return CreateDocumentBackground.createDocumentBackground(
+                    return DocumentFunctions.createDocumentBackground(
                         dataUrl,
                         id,
                         width,
@@ -180,12 +172,7 @@ public class HtmlRenderer {
 
         IReadOnlyList<byte[]>[]? processedBackgroundFrames = processed.backgroundFrames;
         IReadOnlyList<ILocator>? processedBackgroundElements = processed.backgroundElements;
-        
-        var imageElements = new List<ILocator>();
-        for (int i = 0; i < processedElements.Count; i++) {
-            var imageElement = await ReplaceElementWithImageAsync(processedElements[i], processedFrames[0][i]);
-            imageElements.Add(imageElement);
-        }
+
         byte[][] documentFrames = new byte[processedFrames.Length][];
 
         for (int frameIdx = 0; frameIdx < processedFrames.Length; ++frameIdx) {
@@ -198,8 +185,8 @@ public class HtmlRenderer {
             IReadOnlyList<byte[]> frameElements = processedFrames[frameIdx];
 
             for (int elementIdx = 0; elementIdx < frameElements.Count; ++elementIdx) {
-                await SetElementImageAsync(
-                    imageElements[elementIdx],
+                await HTMLDocument.SetElementImageAsync(
+                    processedElements[elementIdx],
                     frameElements[elementIdx]
                 );
             }
@@ -212,20 +199,20 @@ public class HtmlRenderer {
                 var frameBackgrounds = processedBackgroundFrames[frameIdx];
 
                 for (int bgIdx = 0; bgIdx < frameBackgrounds.Count; ++bgIdx) {
-                    await SetElementImageAsync(
+                    await HTMLDocument.SetElementImageAsync(
                         processedBackgroundElements[bgIdx],
                         frameBackgrounds[bgIdx]);
                 }
             }
 
-            // --------------------------
+            // ------------------
             // Background Shaders
-            // --------------------------
+            // ------------------
 
             if (documentBackgroundFrames != null) {
                 var backgroundImage = page.Locator($"#{DOCUMENT_BACKGROUND_ID}");
 
-                await SetElementImageAsync(
+                await HTMLDocument.SetElementImageAsync(
                     backgroundImage,
                     documentBackgroundFrames[frameIdx]
                 );
@@ -235,6 +222,7 @@ public class HtmlRenderer {
             // -----------------
             // Apply to the page
             // -----------------
+
             await page.WaitForTimeoutAsync(PAGE_SCREENSHOT_WAIT_TIME);
 
             documentFrames[frameIdx] = await page.ScreenshotAsync(new() {
@@ -245,73 +233,5 @@ public class HtmlRenderer {
         return documentFrames;
     }
 
-    private static async Task SetElementImageAsync(ILocator image, byte[] data) {
-        var base64 = Convert.ToBase64String(data);
-        var dataUrl = $"data:image/png;base64,{base64}";
-
-        await image.EvaluateAsync(
-            """
-            (image, dataUrl) => {
-                image.src = dataUrl;
-            }
-            """,
-            dataUrl);
-    }
-
-    private static async Task<ILocator> ReplaceElementWithImageAsync(ILocator element, byte[] image) {
-        var base64 = Convert.ToBase64String(image);
-        var dataUrl = $"data:image/png;base64,{base64}";
-
-        var id = $"shader-output-{Guid.NewGuid():N}";
-        
-        var createElementBackgroundScript = await File.ReadAllTextAsync(FilePaths.WebScriptPaths.REPLACE_ELEMENT_WITH_IMAGE);
-
-        await element.Page.AddScriptTagAsync(new() {
-            Content = createElementBackgroundScript
-        });
-
-        await element.EvaluateAsync<string>(
-            """
-                (element, id) => {
-                    ReplaceElementWithImage.replaceElementWithImage(element, id);
-                }
-            """,
-            new
-            {
-                id,
-                dataUrl
-            });
-
-        return element.Page.Locator($"#{id}");
-    }
-
-    private static async Task SetPageBackgroundAsync(IPage page, string background) {
-        await page.EvaluateAsync(
-            """
-            (background) => {
-                document.documentElement.style.background = background;
-                document.body.style.background = background;
-            }
-            """,
-            background
-        );
-    }
-
-    private static async Task<DocumentSize> GetDocumentSizeAsync(IPage page){
-        var size = await page.EvaluateAsync<int[]>(
-            """
-            () => {
-                return [
-                    document.documentElement.scrollWidth,
-                    document.documentElement.scrollHeight
-                ];
-            }
-            """
-        );
-
-        return new DocumentSize{
-            Width = size[0],
-            Height = size[1],
-        };
-    }
+   
 }
