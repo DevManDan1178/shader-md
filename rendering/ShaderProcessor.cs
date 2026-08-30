@@ -2,21 +2,20 @@ using Microsoft.Playwright;
 
 namespace ShaderMarkdown.Rendering;
 
-public class ShaderProcessor : IShaderProcessor
-{
+/// <summary>
+/// Implementation of the IShaderProcessor interface
+/// Implements the application of a shader to an image
+/// </summary>
+public class ShaderProcessor : IShaderProcessor {
     private readonly string _shaderDirectory;
     private readonly string _rendererPath;
 
-    public ShaderProcessor()
-    {
-        _shaderDirectory = Path.Combine(AppContext.BaseDirectory, "shaders");
-        _rendererPath = Path.Combine(AppContext.BaseDirectory, "generated", "shaderRenderer.js");
+    public ShaderProcessor() {
+        _shaderDirectory = FilePaths.Directories.DEFAULT_SHADER_DIRECTORY;
+        _rendererPath = FilePaths.WebScriptPaths.SHADER_RENDERER;
     }
 
-    public async Task<byte[]> ApplyAsync(IPage page, byte[] image, string shader)
-    {
-        Console.WriteLine($"Applying shader: {shader}");
-
+    public async Task<byte[]> ApplyAsync(IPage page, byte[] image, string shader, ShaderParameters shaderParameters) {
         var shaderPath = Path.Combine(_shaderDirectory, $"{shader}.frag");
 
         if (!File.Exists(shaderPath)) {
@@ -24,8 +23,6 @@ public class ShaderProcessor : IShaderProcessor
         }
 
         var source = await File.ReadAllTextAsync(shaderPath);
-
-        Console.WriteLine($"Loaded shader: {shaderPath}");
 
         if (!File.Exists(_rendererPath)) {
             throw new FileNotFoundException("Shader renderer JavaScript was not found.", _rendererPath);
@@ -47,10 +44,11 @@ public class ShaderProcessor : IShaderProcessor
             """,
             new {
                 imageBase64,
-                fragmentSource = source
+                fragmentSource = source,
+                parameters = new {
+                    time = (double) shaderParameters.Time,
+                }
             });
-
-        Console.WriteLine("Shader execution complete.");
 
         return result;
     }
