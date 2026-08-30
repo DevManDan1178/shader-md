@@ -6,7 +6,7 @@ namespace ShaderMarkdown.Rendering;
 /// <summary>
 /// Contains the method to apply shaders and export the readme
 /// </summary>
-public class HtmlRenderer {
+public class HtmlShaderRenderer {
     /// <summary>
     /// The waiting time before screenshotting, after adding all elements to the page at a frame.
     /// Gives time for the page to render everything.
@@ -18,7 +18,7 @@ public class HtmlRenderer {
     
     private readonly IShaderProcessor _shaderProcessor;
     private readonly HTMLShaderProcessor _htmlShaderProcessor;
-    public HtmlRenderer(IShaderProcessor shaderProcessor) {
+    public HtmlShaderRenderer(IShaderProcessor shaderProcessor) {
         _shaderProcessor = shaderProcessor;
         _htmlShaderProcessor = new (_shaderProcessor);
     }
@@ -32,8 +32,8 @@ public class HtmlRenderer {
         float duration = 1f,
         float scale = 2,
         string backgroundColor = "#0d1117",
-        string? backgroundShader = null,
-        string? outerShader = null
+        ShaderInfo? backgroundShaderInfo = null,
+        ShaderInfo? outerShaderInfo = null
     ) {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
@@ -76,12 +76,12 @@ public class HtmlRenderer {
         
  
         byte[][]? documentBackgroundFrames = null;
-        if (string.IsNullOrWhiteSpace(backgroundShader)) {
+        if (backgroundShaderInfo == null) {
             Console.WriteLine("Setting page backgroun");
             await HTMLDocument.SetPageBackgroundAsync(page, backgroundColor);
         } else {
             Console.WriteLine("Generating page background frames");
-            documentBackgroundFrames = await GetDocumentBackgroundFrames(page, documentSize, fps, duration, backgroundColor, backgroundShader);
+            documentBackgroundFrames = await GetDocumentBackgroundFrames(page, documentSize, fps, duration, backgroundColor, backgroundShaderInfo);
         } 
         
         Console.WriteLine($"Now compositing.");
@@ -94,23 +94,30 @@ public class HtmlRenderer {
 
         Console.WriteLine("Compositing frame finished.");
 
-        if (outerShader != null) {
-            Console.WriteLine($"Now applying outer shader to document: {outerShader}");
-            documentFrames = await GetShaderizedDocumentFramesAsync(page, documentFrames, fps, outerShader);    
+        if (outerShaderInfo != null) {
+            Console.WriteLine($"Now applying outer shader to document: {outerShaderInfo.ShaderPath}");
+            documentFrames = await GetShaderizedDocumentFramesAsync(page, documentFrames, fps, duration, outerShaderInfo);    
         }
         Console.WriteLine("Exporting.");
         await GifBuilder.SaveGifAsync(documentFrames, fps, outputPath);
     }
 
-    private async Task<byte[][]> GetShaderizedDocumentFramesAsync(IPage page, byte[][] documentFrames, int fps, string shader) {
+    private async Task<byte[][]> GetShaderizedDocumentFramesAsync(IPage page, byte[][] documentFrames, int fps, float duration, ShaderInfo shaderInfo) {
         byte[][] shaderizedDocumentFrames = new byte[documentFrames.Length][];
-        float shaderTime = 0;
+        
         await _shaderProcessor.LoadPageShaderScript(page);
-        for (int i = 0; i < documentFrames.Length; shaderTime += (float) i++/fps) {
-            Console.WriteLine($"Shaderizing: document frame {i + 1} of {documentFrames.Length}.");
-            shaderizedDocumentFrames[i] = await _shaderProcessor.ApplyAsync(page, documentFrames[i], shader, new ShaderParameters {
-                Time = shaderTime
-            });
+        
+        int frameCount = (int) (fps * duration);
+        
+        for (int frame = 0; frame < documentFrames.Length; ++frame) {
+            Console.WriteLine($"Shaderizing: document frame {frame + 1} of {documentFrames.Length}.");
+            
+            if (shaderInfo.ShaderParameters.InterpolateTime) {
+                float shaderTime = (float) frame / (float) frameCount;
+                shaderInfo.ShaderParameters.Time = shaderTime;
+            }
+            
+            shaderizedDocumentFrames[frame] = await _shaderProcessor.ApplyAsync(page, documentFrames[frame], shaderInfo);
         }
         return shaderizedDocumentFrames;
     }
@@ -121,13 +128,13 @@ public class HtmlRenderer {
         int fps,
         float duration,
         string backgroundColor,
-        string backgroundShader
+        ShaderInfo backgroundShaderInfo
     ) {
         byte[][] documentBackgroundFrames = await _shaderProcessor.ApplyAnimatedToRectAsync(
             page,
             documentSize.Width,
             documentSize.Height,
-            backgroundShader,
+            backgroundShaderInfo,
             fps,
             duration,
             backgroundColor

@@ -23,17 +23,17 @@ public class ShaderProcessor : IShaderProcessor {
         });
     }
 
-    public async Task<byte[]> ApplyAsync(IPage page, byte[] image, string shader, ShaderParameters shaderParameters) {
-        var shaderPath = Path.Combine(_shaderDirectory, $"{shader}.frag");
+    public async Task<byte[]> ApplyAsync(IPage page, byte[] image, ShaderInfo shaderInfo) {
 
-        if (!File.Exists(shaderPath)) {
-            throw new FileNotFoundException($"Shader '{shader}' was not found.", shaderPath);
+        if (!File.Exists(shaderInfo.ShaderPath)) {
+            Console.WriteLine(shaderInfo.ShaderPath);
+            throw new FileNotFoundException($"Shader not found: {shaderInfo.ShaderPath}\nAre you sure \"{Path.GetFileName(shaderInfo.ShaderPath)}\" is the correct file name?");
         }
 
-        var source = await File.ReadAllTextAsync(shaderPath);
+        var source = await File.ReadAllTextAsync(shaderInfo.ShaderPath);
 
         if (!File.Exists(_rendererPath)) {
-            throw new FileNotFoundException("Shader renderer JavaScript was not found.", _rendererPath);
+            throw new FileNotFoundException($"Shader renderer JavaScript not found: \"{_rendererPath}\".");
         }
 
         var imageBase64 = Convert.ToBase64String(image);
@@ -48,7 +48,8 @@ public class ShaderProcessor : IShaderProcessor {
                 imageBase64,
                 fragmentSource = source,
                 parameters = new {
-                    time = (double) shaderParameters.Time,
+                    time = (double) shaderInfo.ShaderParameters.Time,
+                    shaderProperties = shaderInfo.ShaderParameters.ShaderProperties,
                 }
             });
 

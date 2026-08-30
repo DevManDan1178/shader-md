@@ -8,7 +8,13 @@ namespace ShaderMarkdown.Rendering;
 /// Interface containing functions to process shaders to images (byte[])
 /// </summary>
 public interface IShaderProcessor {
-    async Task<byte[][]> ApplyAnimatedAsync(IPage page, byte[] image, string shader, int framesPerSecond, float duration) {
+    async Task<byte[][]> ApplyAnimatedAsync(
+        IPage page, 
+        byte[] image, 
+        ShaderInfo shaderInfo, 
+        int framesPerSecond, 
+        float duration
+    ) {
         if (framesPerSecond <= 0) {
             throw new ArgumentOutOfRangeException(nameof(framesPerSecond));
         }
@@ -20,11 +26,12 @@ public interface IShaderProcessor {
         int frameCount = (int) (framesPerSecond * duration);
         byte[][] frames = new byte[frameCount][];
         await LoadPageShaderScript(page);
-        for (int frame = 0; frame < frameCount; ++frame) {
-            float time = (float) frame / (float) framesPerSecond;
-            var thisFrame = await ApplyAsync(page, image, shader, new ShaderParameters {
-                Time = time,
-            });
+        ShaderParameters shaderParameters = shaderInfo.ShaderParameters;
+        for (int frame = 0; frame < frameCount; ++frame) {  
+            if (shaderParameters.InterpolateTime) {
+                shaderParameters.Time = (float) frame / (float) framesPerSecond;
+            }
+            var thisFrame = await ApplyAsync(page, image, shaderInfo);
             frames[frame] = thisFrame;
         }
 
@@ -32,7 +39,15 @@ public interface IShaderProcessor {
     }
 
     Task LoadPageShaderScript(IPage page);
-    async Task<byte[][]> ApplyAnimatedToRectAsync(IPage page, int width, int height, string shader, int framesPerSecond, float duration, string color = "#FFFFFF") {
+    async Task<byte[][]> ApplyAnimatedToRectAsync(
+        IPage page, 
+        int width, 
+        int height, 
+        ShaderInfo shaderInfo, 
+        int framesPerSecond, 
+        float duration, 
+        string color = "#FFFFFF"
+    ) {
         if (width <= 0) {
             throw new ArgumentOutOfRangeException(nameof(width));
         }
@@ -52,16 +67,12 @@ public interface IShaderProcessor {
         return await ApplyAnimatedAsync(
             page,
             stream.ToArray(),
-            shader,
+            shaderInfo,
             framesPerSecond,
             duration
         );
     }
 
-    Task<byte[]> ApplyAsync(IPage page, byte[] image, string shader, ShaderParameters shaderParameters);
+    Task<byte[]> ApplyAsync(IPage page, byte[] image, ShaderInfo shaderInfo);
 }
 
-
-public class ShaderParameters {
-    public float Time { get; set; }
-}

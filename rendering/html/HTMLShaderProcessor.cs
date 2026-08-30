@@ -13,9 +13,10 @@ public class HTMLShaderProcessor {
     }
 
     const string SHADER_KEY = "shader";
+    const string SHADER_PARAMETERS_KEY = $"{SHADER_KEY}-params";
     const string SHADER_BG_KEY = "shader-bg";
+    const string SHADER_BG_PARAMETERS_KEY  = $"{SHADER_BG_KEY}-params";
     const string IGNORE_PARENT_SHADERS_KEY = "ignoreParentShaders";
-    const bool DEFAULT_IGNORE_PARENT_SHADERS = true;
     const string SHADER_OUTPUT_CLASSNAME = "shader-output";
 
     private sealed class ElementInfo {
@@ -88,7 +89,18 @@ public class HTMLShaderProcessor {
                     int bgWidth = Math.Max(1, (int)Math.Ceiling(box.Width));
                     int bgHeight = Math.Max(1, (int)Math.Ceiling(box.Height));
 
-                    var frames = await _shaderProcessor.ApplyAnimatedToRectAsync(page, bgWidth, bgHeight, shaderBg, fps, duration);
+                    var shader_params = await element.GetAttributeAsync(SHADER_BG_PARAMETERS_KEY);   
+                    var frames = await _shaderProcessor.ApplyAnimatedToRectAsync(
+                        page, 
+                        bgWidth, 
+                        bgHeight, 
+                        ShaderInfo.FromShaderFileName(
+                            shaderBg, 
+                            ShaderParameters.ParseShaderParameters(shader_params)
+                        ), 
+                        fps, 
+                        duration
+                    );
 
                     for (int frameIdx = 0; frameIdx < frameCount; frameIdx++) {
                         processedBackgroundFrames[frameIdx].Add(frames[frameIdx]);
@@ -101,7 +113,19 @@ public class HTMLShaderProcessor {
 
             if (!string.IsNullOrWhiteSpace(shader)) {
                 var screenshot = await ScreenshotForShaderAsync(element);
-                var frames = await _shaderProcessor.ApplyAnimatedAsync(page, screenshot, shader, fps, duration);
+
+                var shader_params = await element.GetAttributeAsync(SHADER_PARAMETERS_KEY);
+
+                var frames = await _shaderProcessor.ApplyAnimatedAsync(
+                    page, 
+                    screenshot, 
+                    ShaderInfo.FromShaderFileName(
+                        shader, 
+                        ShaderParameters.ParseShaderParameters(shader_params)
+                    ), 
+                    fps, 
+                    duration
+                );
 
                 for (int frameIdx = 0; frameIdx < frameCount; frameIdx++) {
                     processedFrames[frameIdx].Add(frames[frameIdx]);
