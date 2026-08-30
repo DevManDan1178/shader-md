@@ -1,8 +1,12 @@
+export type ShaderProperties = {
+
+}
 export interface ShaderRenderArgs {
     imageBase64: string;
     fragmentSource: string;
     parameters: {
         time: number;
+        shaderProperties : ShaderProperties;
     };
 }
 
