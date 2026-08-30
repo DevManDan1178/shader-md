@@ -14,11 +14,16 @@ var shaderProcessor = new ShaderProcessor();
 var renderer = new HtmlRenderer(shaderProcessor);
 
 await renderer.RenderAsync(
-    html,
-    "output/README.png",
-    width: 1200,
-    height: 800,
-    scale: 2
+    html: html,
+    outputPath: "output/README.gif",
+    width: 800,
+    height: 100,
+    fps: 15,
+    duration: 1,
+    scale: 2,
+    backgroundColor: " #0d1117",
+    backgroundShader: "test",
+    outerShader: "rainbow"
 );
 
 Console.WriteLine("Rendered to output/");
