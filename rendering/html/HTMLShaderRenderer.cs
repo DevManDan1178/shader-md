@@ -48,12 +48,13 @@ public class HtmlShaderRenderer {
 
         await HTMLDocument.LoadPageDocumentFunctions(page);
 
-        /* print browser logs on console?
-        page.Console += (_, msg) =>
-        {
+        page.Console += (_, msg) => {
+            if (msg.Text.Contains("GPU stall due to ReadPixels")) {  
+                // Unavoidable warning       
+                return;
+            }
             Console.WriteLine($"[Browser] {msg.Type}: {msg.Text}");
         };
-        */
 
         var fullHtml = await page.EvaluateAsync<string>(
             """
