@@ -12,7 +12,7 @@ public class ShaderProcessor : IShaderProcessor {
 
     public ShaderProcessor() {
         _shaderDirectory = FilePaths.Directories.DEFAULT_SHADER_DIRECTORY;
-        _rendererPath = FilePaths.WebScriptPaths.SHADER_RENDERER;
+        _rendererPath = FilePaths.WebScriptPaths.RENDER_SHADER;
     }
 
     public async Task<byte[]> ApplyAsync(IPage page, byte[] image, string shader, ShaderParameters shaderParameters) {
@@ -39,7 +39,7 @@ public class ShaderProcessor : IShaderProcessor {
         var result = await page.EvaluateAsync<byte[]>(
             """
             async (args) => {
-                return await ShaderRenderer.renderShader(args);
+                return await RenderShader.renderShader(args);
             }
             """,
             new {

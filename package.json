@@ -1,8 +1,8 @@
 {
   "private": true,
   "scripts": {
-    "build": "npm run build:shader && npm run build:create-element-background && npm run build:create-document-background && npm run build:create-document && npm run build:replace-element-with-image",
-    "build:shader": "esbuild web/ShaderRenderer.ts --bundle --format=iife --global-name=ShaderRenderer --outfile=generated/ShaderRenderer.js",
+    "build": "npm run build:render-shader && npm run build:create-element-background && npm run build:create-document-background && npm run build:create-document && npm run build:replace-element-with-image",
+    "build:render-shader": "esbuild web/RenderShader.ts --bundle --format=iife --global-name=RenderShader --outfile=generated/RenderShader.js",
     "build:create-element-background": "esbuild web/CreateElementBackground.ts --bundle --format=iife --global-name=CreateElementBackground --outfile=generated/CreateElementBackground.js",
     "build:create-document-background": "esbuild web/CreateDocumentBackground.ts --bundle --format=iife --global-name=CreateDocumentBackground --outfile=generated/CreateDocumentBackground.js",
     "build:create-document": "esbuild web/CreateDocument.ts --bundle --format=iife --global-name=CreateDocument --outfile=generated/CreateDocument.js",
