@@ -1,6 +1,13 @@
-export type ShaderProperties = {
+type JSONValue =
+    | string
+    | number
+    | boolean
+    | null
+    | JSONValue[]
+    | { [key: string]: JSONValue };
 
-}
+export type ShaderProperties = Record<string, JSONValue>;
+
 export interface ShaderRenderArgs {
     imageBase64: string;
     fragmentSource: string;
@@ -36,6 +43,8 @@ const identityVertexShader : string = (
     `
 );
 
+
+
 export async function renderShader(args: ShaderRenderArgs): Promise<number[]> {
     const { imageBase64, fragmentSource, parameters } = args;
     const image = new Image();
@@ -62,7 +71,7 @@ export async function renderShader(args: ShaderRenderArgs): Promise<number[]> {
     }
 
     // ----------------------------------------
-    // Compile shader helper
+    // Compile shader helper function
     // ----------------------------------------
 
     function compileShader(type: number, source: string, name: string): WebGLShader {
@@ -98,7 +107,7 @@ export async function renderShader(args: ShaderRenderArgs): Promise<number[]> {
     const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentSource, "Fragment");
 
     // ----------------------------------------
-    // Program
+    // Shader program
     // ----------------------------------------
 
     const program = gl.createProgram();
@@ -229,8 +238,62 @@ export async function renderShader(args: ShaderRenderArgs): Promise<number[]> {
     if (timeLocation !== null) {
         gl.uniform1f(timeLocation, parameters.time);
     }
-    if (gl.getError() != 0) {
+    if (gl.getError() != gl.NO_ERROR) {
         console.log("GL error:", gl.getError());
+    }
+
+    // ----------------------------------------
+    // Custom shader property uniforms
+    // ----------------------------------------
+    
+    const shaderProperties = {...parseShaderDefaults(fragmentSource), ...parameters.shaderProperties};
+    
+    if (shaderProperties) {
+        const uniformCount = gl.getProgramParameter(
+            program,
+            gl.ACTIVE_UNIFORMS
+        );
+
+        const uniforms = new Map<string, WebGLActiveInfo>();
+
+        for (let i = 0; i < uniformCount; i++) {
+            const info = gl.getActiveUniform(program, i);
+
+            if (info !== null) {
+                uniforms.set(info.name, info);
+            }
+        }
+
+        for (const [property, value] of Object.entries(shaderProperties)) {
+         
+            try {
+                const info = uniforms.get(property);
+
+                if (!info) {
+                    console.warn(`Shader property "${property}" does not exist in shader.`);
+                    continue;
+                }
+
+                const propertyLocation = gl.getUniformLocation(program, property);
+
+                if (propertyLocation === null) {
+                    console.warn(`Could not get location for shader property "${property}".`);
+                    continue;
+                }
+                setShaderUniform(
+                    gl,
+                    propertyLocation,
+                    info.type,
+                    value
+                );
+                
+                if (gl.getError() != gl.NO_ERROR) {
+                    console.log("GL error:", gl.getError());
+                }
+            } catch (e) {
+                console.log(`Error applying property ${property} with value ${value} to shader.`);
+            }
+        }
     }
 
     // ----------------------------------------
@@ -257,4 +320,271 @@ export async function renderShader(args: ShaderRenderArgs): Promise<number[]> {
     }
 
     return bytes;
+}
+
+/**
+ * Parses default shader properties declared in the shader source.
+ *
+ * Declarations can appear inside a line or block comment.
+ * Expected format:
+ *   @default [PropertyName] [PropertyValue]
+ *  
+ * [PropertyName] [PropertyValue] must be entirely one line.
+ * @param source The source code of the shader.
+ * @returns The parsed default properties as ShaderProperties.
+ */
+function parseShaderDefaults(source: string): ShaderProperties {
+    const defaults: ShaderProperties = {};
+
+    const regex = /@default\s+(\w+)\s+([^\r\n]+)/g;
+
+    for (const match of source.matchAll(regex)) {
+        const property = match[1];
+        const value = match[2].trim();
+
+        try {
+            defaults[property] = JSON.parse(value) as JSONValue;
+        } catch (e) {
+            throw new Error(
+                `Invalid default value for shader property "${property}": ${value}`
+            );
+        }
+    }
+
+    return defaults;
+}
+
+function setShaderUniform(
+    gl: WebGL2RenderingContext,
+    location: WebGLUniformLocation,
+    type: number,
+    value: JSONValue
+): void {
+    switch (type) {
+        // ----------------------------------------
+        // Floating point
+        // ----------------------------------------
+
+        case gl.FLOAT:
+            if (typeof value !== "number") {
+                throw new Error(`Expected number, got ${typeof value}`);
+            }
+
+            gl.uniform1f(location, value);
+            break;
+
+        case gl.FLOAT_VEC2:
+            if (!isNumberArray(value, 2)) {
+                throw new Error("Expected number[2] for vec2");
+            }
+
+            gl.uniform2fv(location, value);
+            break;
+
+        case gl.FLOAT_VEC3:
+            if (!isNumberArray(value, 3)) {
+                throw new Error("Expected number[3] for vec3");
+            }
+
+            gl.uniform3fv(location, value);
+            break;
+
+        case gl.FLOAT_VEC4:
+            if (!isNumberArray(value, 4)) {
+                throw new Error("Expected number[4] for vec4");
+            }
+
+            gl.uniform4fv(location, value);
+            break;
+
+        // ----------------------------------------
+        // Integers
+        // ----------------------------------------
+
+        case gl.INT:
+            if (typeof value !== "number") {
+                throw new Error(`Expected number, got ${typeof value}`);
+            }
+
+            gl.uniform1i(location, value);
+            break;
+
+        case gl.INT_VEC2:
+            if (!isNumberArray(value, 2)) {
+                throw new Error("Expected number[2] for ivec2");
+            }
+
+            gl.uniform2iv(location, value);
+            break;
+
+        case gl.INT_VEC3:
+            if (!isNumberArray(value, 3)) {
+                throw new Error("Expected number[3] for ivec3");
+            }
+
+            gl.uniform3iv(location, value);
+            break;
+
+        case gl.INT_VEC4:
+            if (!isNumberArray(value, 4)) {
+                throw new Error("Expected number[4] for ivec4");
+            }
+
+            gl.uniform4iv(location, value);
+            break;
+
+        // ----------------------------------------
+        // Unsigned integers
+        // ----------------------------------------
+
+        case gl.UNSIGNED_INT:
+            if (typeof value !== "number") {
+                throw new Error(`Expected number, got ${typeof value}`);
+            }
+
+            gl.uniform1ui(location, value);
+            break;
+
+        case gl.UNSIGNED_INT_VEC2:
+            if (!isNumberArray(value, 2)) {
+                throw new Error("Expected number[2] for uvec2");
+            }
+
+            gl.uniform2uiv(location, value);
+            break;
+
+        case gl.UNSIGNED_INT_VEC3:
+            if (!isNumberArray(value, 3)) {
+                throw new Error("Expected number[3] for uvec3");
+            }
+
+            gl.uniform3uiv(location, value);
+            break;
+
+        case gl.UNSIGNED_INT_VEC4:
+            if (!isNumberArray(value, 4)) {
+                throw new Error("Expected number[4] for uvec4");
+            }
+
+            gl.uniform4uiv(location, value);
+            break;
+
+        // ----------------------------------------
+        // Booleans
+        // ----------------------------------------
+
+        case gl.BOOL:
+            if (typeof value !== "boolean") {
+                throw new Error(`Expected boolean, got ${typeof value}`);
+            }
+
+            gl.uniform1i(location, value ? 1 : 0);
+            break;
+
+        case gl.BOOL_VEC2:
+            if (!isBooleanArray(value, 2)) {
+                throw new Error("Expected boolean[2] for bvec2");
+            }
+
+            gl.uniform2iv(
+                location,
+                value.map(v => v ? 1 : 0)
+            );
+            break;
+
+        case gl.BOOL_VEC3:
+            if (!isBooleanArray(value, 3)) {
+                throw new Error("Expected boolean[3] for bvec3");
+            }
+
+            gl.uniform3iv(
+                location,
+                value.map(v => v ? 1 : 0)
+            );
+            break;
+
+        case gl.BOOL_VEC4:
+            if (!isBooleanArray(value, 4)) {
+                throw new Error("Expected boolean[4] for bvec4");
+            }
+
+            gl.uniform4iv(
+                location,
+                value.map(v => v ? 1 : 0)
+            );
+            break;
+
+        // ----------------------------------------
+        // Matrices
+        // ----------------------------------------
+
+        case gl.FLOAT_MAT2:
+            if (!isNumberArray(value, 4)) {
+                throw new Error("Expected number[4] for mat2");
+            }
+
+            gl.uniformMatrix2fv(location, false, value);
+            break;
+
+        case gl.FLOAT_MAT3:
+            if (!isNumberArray(value, 9)) {
+                throw new Error("Expected number[9] for mat3");
+            }
+
+            gl.uniformMatrix3fv(location, false, value);
+            break;
+
+        case gl.FLOAT_MAT4:
+            if (!isNumberArray(value, 16)) {
+                throw new Error("Expected number[16] for mat4");
+            }
+
+            gl.uniformMatrix4fv(location, false, value);
+            break;
+
+        // ----------------------------------------
+        // Samplers
+        // ----------------------------------------
+
+        case gl.SAMPLER_2D:
+        case gl.SAMPLER_CUBE:
+        case gl.SAMPLER_2D_SHADOW:
+        case gl.SAMPLER_CUBE_SHADOW:
+        case gl.INT_SAMPLER_2D:
+        case gl.INT_SAMPLER_CUBE:
+        case gl.UNSIGNED_INT_SAMPLER_2D:
+        case gl.UNSIGNED_INT_SAMPLER_CUBE:
+            if (typeof value !== "number") {
+                throw new Error(`Expected texture unit number`);
+            }
+
+            gl.uniform1i(location, value);
+            break;
+
+        default:
+            throw new Error(`Unsupported uniform type: ${type}`);
+    }
+}
+
+
+function isNumberArray(
+    value: JSONValue,
+    length: number
+): value is number[] {
+    return (
+        Array.isArray(value) &&
+        value.length === length &&
+        value.every(v => typeof v === "number")
+    );
+}
+
+function isBooleanArray(
+    value: JSONValue,
+    length: number
+): value is boolean[] {
+    return (
+        Array.isArray(value) &&
+        value.length === length &&
+        value.every(v => typeof v === "boolean")
+    );
 }
