@@ -12,7 +12,15 @@ public class ShaderProcessor : IShaderProcessor {
 
     public ShaderProcessor() {
         _shaderDirectory = FilePaths.Directories.DEFAULT_SHADER_DIRECTORY;
-        _rendererPath = FilePaths.WebScriptPaths.RENDER_SHADER;
+        _rendererPath = FilePaths.WebScriptPaths.SHADER_RENDERER;
+    }
+
+    public async Task LoadPageShaderScript(IPage page) {
+        var rendererSource = await File.ReadAllTextAsync(_rendererPath);
+
+        await page.AddScriptTagAsync(new() {
+            Content = rendererSource
+        });
     }
 
     public async Task<byte[]> ApplyAsync(IPage page, byte[] image, string shader, ShaderParameters shaderParameters) {
@@ -28,18 +36,12 @@ public class ShaderProcessor : IShaderProcessor {
             throw new FileNotFoundException("Shader renderer JavaScript was not found.", _rendererPath);
         }
 
-        var rendererSource = await File.ReadAllTextAsync(_rendererPath);
-
-        await page.AddScriptTagAsync(new() {
-            Content = rendererSource
-        });
-
         var imageBase64 = Convert.ToBase64String(image);
 
         var result = await page.EvaluateAsync<byte[]>(
             """
             async (args) => {
-                return await RenderShader.renderShader(args);
+                return await ShaderRenderer.renderShader(args);
             }
             """,
             new {
