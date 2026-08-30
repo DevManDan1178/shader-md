@@ -8,10 +8,9 @@ export function createElementBackground(
         element.style.position = "relative";
     }
 
-    element.style.zIndex =
-        computed.zIndex === "auto"
-            ? "0"
-            : computed.zIndex;
+    element.style.zIndex = computed.zIndex === "auto"
+        ? "0"
+        : computed.zIndex;
 
     const image = document.createElement("img");
 
