@@ -17,7 +17,7 @@ public static class GifBuilder {
     /// Max FPS is the inverse, so it is equivalent to GIF_FRAME_DELAY_OFFSET
     /// </summary>
     private const int MAX_POSSIBLE_FPS = (int) GIF_FRAME_DELAY_OFFSET;
-    public static async Task SaveGifAsync(IReadOnlyList<byte[]> frames, string outputPath, int fps) {
+    public static async Task SaveGifAsync(IReadOnlyList<byte[]> frames, int fps, string outputPath) {
         if (frames.Count == 0) {
             throw new ArgumentException("No frames were provided.", nameof(frames));
         }
