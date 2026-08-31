@@ -11,6 +11,8 @@ const SHADER_KEY = "shader";
 const SHADER_BG_KEY = "shader-bg";
 const IGNORE_PARENT_SHADERS_KEY = "ignoreParentShaders";
 
+const SHADER_FOREGROUND_ID = "shader-foreground-layer";
+
 /**
  * @brief Wraps raw HTML in a full document with the base stylesheet.
  * @param html Body content to embed.
@@ -225,12 +227,12 @@ function getDepth(element: Element): number {
  * @brief Creates the foreground overlay container, if it doesn't already exist.
  */
 export function createShaderLayerContainer() {
-    if (document.getElementById("shader-foreground-layer")) {
+    if (document.getElementById(SHADER_FOREGROUND_ID)) {
         return;
     }
 
     const foregrounds = document.createElement("div");
-    foregrounds.id = "shader-foreground-layer";
+    foregrounds.id = SHADER_FOREGROUND_ID;
     foregrounds.style.position = "absolute";
     foregrounds.style.left = "0";
     foregrounds.style.top = "0";
@@ -293,7 +295,7 @@ export function createShaderLayer(
         image.style.height = rect.height + "px";
         image.style.zIndex = String(args.depth);
 
-        const container = document.getElementById("shader-foreground-layer")!;
+        const container = document.getElementById(SHADER_FOREGROUND_ID)!;
         container.appendChild(image);
     }
 }
@@ -305,7 +307,7 @@ export function createShaderLayer(
  */
 export function getDescendantsIgnoringParentShaders(element : HTMLElement) : string[] {
     const result = [];
-    const descendants = element.querySelectorAll("[ignoreParentShaders]");
+    const descendants = element.querySelectorAll(`[${IGNORE_PARENT_SHADERS_KEY}]`);
 
     for (const descendant of descendants) {
         if (descendant.id) {
@@ -362,8 +364,7 @@ export function setElementVisible(element: HTMLElement, visible: boolean): void 
 
     // Restore the original inline visibility.
     if (element.dataset.shaderPreviousVisibilityStored) {
-        element.style.visibility =
-            element.dataset.shaderPreviousVisibility ?? "";
+        element.style.visibility = element.dataset.shaderPreviousVisibility ?? "";
 
         delete element.dataset.shaderPreviousVisibilityStored;
         delete element.dataset.shaderPreviousVisibility;
