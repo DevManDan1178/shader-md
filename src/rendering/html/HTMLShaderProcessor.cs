@@ -139,7 +139,7 @@ public class HTMLShaderProcessor {
             if (!string.IsNullOrWhiteSpace(shader)) {
                 await element.EvaluateAsync(
                     """
-                    element => DocumentFunctions.hideOriginalElement(element)
+                    (element) => DocumentFunctions.hideOriginalElement(element)
                     """
                 );
             }
