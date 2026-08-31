@@ -14,6 +14,10 @@ public interface IShaderProcessor {
     float GetShaderTime(float initialTime, float timeScale, int frame, int framesPerSecond) {
         return initialTime + timeScale * ((float) frame / framesPerSecond);
     }
+
+    int GetShaderFrameCount(int framesPerSecond, float duration) {
+        return (int) Math.Max(Math.Round(framesPerSecond * duration), 1);
+    }
     async Task<byte[][]> ApplyOverAnimatedAsync(
         IBrowserContext browserContext, 
         byte[][] frames, 
@@ -38,7 +42,6 @@ public interface IShaderProcessor {
                 .Select(async (workerIdx) => {
                     IPage page = await browserContext.NewPageAsync();
                     await LoadPageShaderScript(page);
-
                     for (int frame = 0 + workerIdx; frame < frames.Length; frame += workerCount) {
                         Console.WriteLine($"Shaderizing: document frame {frame + 1} of {frames.Length}.");
                         shaderizedFrames[frame] = await ApplyAsync(
@@ -72,7 +75,7 @@ public interface IShaderProcessor {
             throw new ArgumentOutOfRangeException(nameof(duration));
         }
             
-        byte[][] frames = new byte[(int) (framesPerSecond * duration)][];
+        byte[][] frames = new byte[GetShaderFrameCount(framesPerSecond, duration)][];
         
         float timeScale = shaderInfo.ShaderParameters.TimeScale;
         float shaderInitialTime = shaderInfo.ShaderParameters.Time;
@@ -107,7 +110,7 @@ public interface IShaderProcessor {
                 .Select(async (workerIdx) => {
                     IPage page = await browserContext.NewPageAsync();
                     await LoadPageShaderScript(page);
-                    
+
                     for (int frame = 0 + workerIdx; frame < frames.Length; frame += workerCount)  {   
                         frames[frame] = await ApplyAsync(
                             page, 

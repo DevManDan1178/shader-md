@@ -52,8 +52,8 @@ public class HTMLShaderProcessor {
         IReadOnlyList<byte[]>[]? backgroundFrames,
         IReadOnlyList<ILocator>? backgroundElements
     )> ProcessShadersAsync(IPage page, int fps = 30, float duration = 1f) {
-        int frameCount = Math.Max(1, (int)(fps * duration));
-
+        int frameCount = _shaderProcessor.GetShaderFrameCount(fps, duration);
+        
         var processedElements = new List<ILocator>();
         var processedBackgroundElements = new List<ILocator>();
 
