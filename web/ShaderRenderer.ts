@@ -9,6 +9,7 @@ type JSONValue =
 export type ShaderProperties = Record<string, JSONValue>;
 
 export interface ShaderFrameParams {
+    imageBase64: string;
     time: number;
     shaderProperties: ShaderProperties;
 }
@@ -17,12 +18,14 @@ export interface ShaderRenderArgs {
     shaderPath: string;
     imageBase64: string;
     fragmentSource: string;
-    parameters: ShaderFrameParams;
+    parameters: {
+        time: number;
+        shaderProperties: ShaderProperties;
+    };
 }
 
 export interface ShaderRenderBatchArgs {
     shaderPath: string;
-    imageBase64: string;
     fragmentSource: string;
     frames: ShaderFrameParams[];
 }
@@ -40,8 +43,14 @@ void main() {
 }
 `;
 
+export interface RawFrameResult {
+    width: number;
+    height: number;
+    pixels: Uint8Array;
+}
+
 class ShaderRenderer {
-    private readonly canvas: OffscreenCanvas;
+    private canvas: OffscreenCanvas;
     private readonly gl: WebGL2RenderingContext;
     private readonly program: WebGLProgram;
 
@@ -60,8 +69,14 @@ class ShaderRenderer {
 
     private readonly defaultShaderProperties: ShaderProperties;
 
-    // Pixel readback buffer, sized once per renderer and reused across frames.
-    private readonly pixelBuffer: Uint8Array;
+    private pixelBuffer: Uint8Array;
+
+    /**
+     * Serializes render calls on this renderer so concurrent frames
+     * (different images, same shader) don't interleave texture upload,
+     * draw, and readback against each other.
+     */
+    private queue: Promise<unknown> = Promise.resolve();
 
     private constructor(
         canvas: OffscreenCanvas,
@@ -89,11 +104,9 @@ class ShaderRenderer {
         this.cacheUniforms();
     }
 
-    static async create(imageBase64: string, fragmentSource: string): Promise<ShaderRenderer> {
-        const blob = await (await fetch("data:image/png;base64," + imageBase64)).blob();
-        const bitmap = await createImageBitmap(blob);
-
-        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    // Renderer is created from the shader only — no image involved yet.
+    static async create(fragmentSource: string): Promise<ShaderRenderer> {
+        const canvas = new OffscreenCanvas(1, 1);
 
         const gl = canvas.getContext("webgl2", {
             premultipliedAlpha: false,
@@ -200,13 +213,10 @@ class ShaderRenderer {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        bitmap.close();
 
         const renderer = new ShaderRenderer(
             canvas, gl, program, positionBuffer, uvBuffer, texture, defaultShaderProperties
@@ -216,10 +226,6 @@ class ShaderRenderer {
 
         if (renderer.textureLocation !== null) {
             gl.uniform1i(renderer.textureLocation, 0);
-        }
-
-        if (renderer.resolutionLocation !== null) {
-            gl.uniform2f(renderer.resolutionLocation, canvas.width, canvas.height);
         }
 
         return renderer;
@@ -244,8 +250,36 @@ class ShaderRenderer {
         }
     }
 
-    // Renders one frame and returns raw RGBA pixels (no PNG encoding, no base64).
-    renderRaw(time: number, shaderProperties: ShaderProperties): Uint8Array {
+
+    /**
+     * Uploads a new source image, resizing the canvas/viewport/pixel buffer and resolution uniform if the image dimensions changed.
+     * @param imageBase64 image
+     */
+    private async uploadImage(imageBase64: string): Promise<void> {
+        const blob = await (await fetch("data:image/png;base64," + imageBase64)).blob();
+        const bitmap = await createImageBitmap(blob);
+
+        const gl = this.gl;
+
+        if (this.canvas.width !== bitmap.width || this.canvas.height !== bitmap.height) {
+            this.canvas.width = bitmap.width;
+            this.canvas.height = bitmap.height;
+            this.pixelBuffer = new Uint8Array(bitmap.width * bitmap.height * 4);
+
+            if (this.resolutionLocation !== null) {
+                gl.useProgram(this.program);
+                gl.uniform2f(this.resolutionLocation, bitmap.width, bitmap.height);
+            }
+        }
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+
+        bitmap.close();
+    }
+
+    private drawAndReadback(time: number, shaderProperties: ShaderProperties): Uint8Array {
         const gl = this.gl;
 
         gl.useProgram(this.program);
@@ -283,24 +317,31 @@ class ShaderRenderer {
         return this.pixelBuffer;
     }
 
-    get width(): number {
-        return this.canvas.width;
-    }
+    // Uploads the given image, then renders one frame. 
+    // Queued so concurrent calls on this renderer run one at a time, since they share a single texture/canvas/pixel buffer.
+    renderFrame(imageBase64: string, time: number, shaderProperties: ShaderProperties): Promise<RawFrameResult> {
+        const task = this.queue.then(async () => {
+            await this.uploadImage(imageBase64);
+            const pixels = this.drawAndReadback(time, shaderProperties).slice();
+            return { width: this.canvas.width, height: this.canvas.height, pixels };
+        });
 
-    get height(): number {
-        return this.canvas.height;
+        // Keep the queue alive even if this task fails.
+        this.queue = task.catch(() => {});
+
+        return task;
     }
 }
 
 const rendererCache = new Map<string, ShaderRenderer | Promise<ShaderRenderer>>();
 
-async function getOrCreateRenderer(shaderPath: string, imageBase64: string, fragmentSource: string): Promise<ShaderRenderer> {
+async function getOrCreateRenderer(shaderPath: string, fragmentSource: string): Promise<ShaderRenderer> {
     const cached = rendererCache.get(shaderPath);
     if (cached) {
         return cached;
     }
 
-    const creationPromise = ShaderRenderer.create(imageBase64, fragmentSource);
+    const creationPromise = ShaderRenderer.create(fragmentSource);
     rendererCache.set(shaderPath, creationPromise);
 
     try {
@@ -321,41 +362,29 @@ export function clearShaderCache(): void {
     rendererCache.clear();
 }
 
-// Raw-pixel result: flat RGBA bytes plus dimensions, so the caller can
-// reconstruct/encode an image however it wants without another format
-// conversion happening on this side.
-export interface RawFrameResult {
-    width: number;
-    height: number;
-    pixels: Uint8Array;
-}
-
 export async function renderShaderRaw(args: ShaderRenderArgs): Promise<RawFrameResult> {
     const { shaderPath, imageBase64, fragmentSource, parameters } = args;
 
-    const renderer = await getOrCreateRenderer(shaderPath, imageBase64, fragmentSource);
-    const pixels = renderer.renderRaw(parameters.time, parameters.shaderProperties);
+    const renderer = await getOrCreateRenderer(shaderPath, fragmentSource);
 
-    return { width: renderer.width, height: renderer.height, pixels };
+    return renderer.renderFrame(imageBase64, parameters.time, parameters.shaderProperties);
 }
 
-// Batched variant: one EvaluateAsync round trip renders many frames of the
-// same shader, amortizing the fixed cross-process call overhead.
+/**
+ * Renders many images through the same shader concurrently in one call.
+ * Each frame's upload+draw+readback is serialized internally per renderer,
+ * but frames for different shaderPaths run fully in parallel.
+ * @param args ShaderRenderBatchArgs 
+ * @returns a promise for the result
+ */
 export async function renderShaderBatchRaw(args: ShaderRenderBatchArgs): Promise<RawFrameResult[]> {
-    const { shaderPath, imageBase64, fragmentSource, frames } = args;
+    const { shaderPath, fragmentSource, frames } = args;
 
-    const renderer = await getOrCreateRenderer(shaderPath, imageBase64, fragmentSource);
+    const renderer = await getOrCreateRenderer(shaderPath, fragmentSource);
 
-    const results: RawFrameResult[] = new Array(frames.length);
-
-    for (let i = 0; i < frames.length; i++) {
-        const frame = frames[i];
-        // Copy out of the shared pixel buffer since renderRaw reuses it.
-        const pixels = renderer.renderRaw(frame.time, frame.shaderProperties).slice();
-        results[i] = { width: renderer.width, height: renderer.height, pixels };
-    }
-
-    return results;
+    return Promise.all(
+        frames.map(frame => renderer.renderFrame(frame.imageBase64, frame.time, frame.shaderProperties))
+    );
 }
 
 function parseShaderDefaults(source: string): ShaderProperties {
