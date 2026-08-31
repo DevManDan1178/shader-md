@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Microsoft.Playwright;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace ShaderMarkdown.Rendering;
 
@@ -8,6 +10,12 @@ namespace ShaderMarkdown.Rendering;
 /// Implements the application of a shader to an image
 /// </summary>
 public class ShaderProcessor : IShaderProcessor {
+    private class RawFrameResult {
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public byte[] Pixels { get; set; } = [];
+    }
+
     private readonly string _shaderDirectory;
     private readonly string _rendererPath;
 
@@ -16,15 +24,24 @@ public class ShaderProcessor : IShaderProcessor {
         _rendererPath = FilePaths.WebScriptPaths.SHADER_RENDERER;
     }
 
+    const string PAGE_SHADER_SCRIPT_LOADED_FLAG = "__shaderRendererLoaded";
     public async Task LoadPageShaderScript(IPage page) {
-        var rendererSource = await File.ReadAllTextAsync(_rendererPath);
+        var alreadyLoaded = await page.EvaluateAsync<bool>(
+            $"() => !!window.{PAGE_SHADER_SCRIPT_LOADED_FLAG}"
+        );
 
-        await page.AddScriptTagAsync(new() {
-            Content = rendererSource
-        });
+        if (!alreadyLoaded) {
+            var rendererSource = await File.ReadAllTextAsync(_rendererPath);
+
+            await page.AddScriptTagAsync(new() {
+                Content = rendererSource
+            });
+
+            await page.EvaluateAsync("() => { window." + PAGE_SHADER_SCRIPT_LOADED_FLAG + " = true; }");
+        }
     }
 
-    public async Task<byte[]> ApplyAsync(IPage page, byte[] image, ShaderInfo shaderInfo) {
+    public async Task<byte[]> ApplyAsync(IPage page, byte[] image, ShaderInfo shaderInfo, float shaderTime) {
 
         if (!File.Exists(shaderInfo.ShaderPath)) {
             Console.WriteLine(shaderInfo.ShaderPath);
@@ -39,25 +56,32 @@ public class ShaderProcessor : IShaderProcessor {
 
         var imageBase64 = Convert.ToBase64String(image);
 
-        var result = await page.EvaluateAsync<byte[]>(
+        RawFrameResult frame = await page.EvaluateAsync<RawFrameResult>(
             """
             async (args) => {
                 args.parameters.shaderProperties = JSON.parse(args.parameters.shaderProperties);
 
-                return await ShaderRenderer.renderShader(args);
+                return await ShaderRenderer.renderShaderRaw(args);
             }
             """,
             new {
                 imageBase64,
                 fragmentSource = source,
+                shaderPath = shaderInfo.ShaderPath,
                 parameters = new {
-                    time = (double) shaderInfo.ShaderParameters.Time,
+                    time = (double) shaderTime, // Breaks shaders when not casting to (double)
                     shaderProperties = JsonSerializer.Serialize(
                         shaderInfo.ShaderParameters.ShaderProperties
                     ),
                 }
-            });
+            }
+        );
 
-        return result;
+        // Encode RGBA bytes into image      
+        using var img = Image.LoadPixelData<Rgba32>(frame.Pixels, frame.Width, frame.Height);
+        using var ms = new MemoryStream();
+        img.SaveAsPng(ms);
+
+        return ms.ToArray();
     }
 }
