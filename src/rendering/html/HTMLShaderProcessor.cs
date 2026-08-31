@@ -166,7 +166,7 @@ public class HTMLShaderProcessor {
 
         await element.EvaluateAsync(
             """
-                (element, args) => DocumentFunctions.createShaderLayer(element, args)
+            (element, args) => DocumentFunctions.createShaderLayer(element, args)
             """,
             new { id, dataUrl, depth, background }
         );
@@ -175,17 +175,32 @@ public class HTMLShaderProcessor {
     }
 
     private static async Task<byte[]> ScreenshotForShaderAsync(ILocator element) {
+        // TODO, ignore siblings too
         var ignoredDescendants = await element.EvaluateAsync<string[]>(
             """
-            element => DocumentFunctions.getScreenshotIgnoredDescendants(element)
+            (element) => DocumentFunctions.getDescendantsIgnoringParentShaders(element)
             """
         );
-
+        await element.EvaluateAsync(
+            """
+            (element) => DocumentFunctions.setSiblingsVisible(element, false)
+            """
+        );
         if (ignoredDescendants.Length == 0) {
-            return await element.ScreenshotAsync(new() {
-                Type = ScreenshotType.Png,
-                OmitBackground = true,
-            });
+            try
+            {
+                return await element.ScreenshotAsync(new() {
+                    Type = ScreenshotType.Png,
+                    OmitBackground = true,
+                });
+            } finally {
+                await element.EvaluateAsync(
+                    """
+                    (element) => DocumentFunctions.setSiblingsVisible(element, true)
+                    """
+                );
+            }
+            
         }
 
         /*
@@ -194,7 +209,7 @@ public class HTMLShaderProcessor {
         */
         var hiddenCount = await element.Page.EvaluateAsync<int>(
             """
-            ids => DocumentFunctions.hideShaderLayers(ids)
+            (ids) => DocumentFunctions.setShaderLayersVisible(ids, false)
             """,
             ignoredDescendants
         );
@@ -209,11 +224,16 @@ public class HTMLShaderProcessor {
             if (hiddenCount > 0) {
                 await element.Page.EvaluateAsync(
                     """
-                    ids => DocumentFunctions.showShaderLayers(ids)
+                    (ids) => DocumentFunctions.setShaderLayersVisible(ids, true)
                     """,
                     ignoredDescendants
                 );
             }
+            await element.EvaluateAsync(
+            """
+            (element) => DocumentFunctions.setSiblingsVisible(element, true)
+            """
+        );
         }
     }
 }
