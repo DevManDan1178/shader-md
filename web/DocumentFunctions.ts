@@ -303,7 +303,7 @@ export function createShaderLayer(
  * @param element Element whose descendants are checked.
  * @return Ids of ignored descendants.
  */
-export function getScreenshotIgnoredDescendants(element : HTMLElement) : string[] {
+export function getDescendantsIgnoringParentShaders(element : HTMLElement) : string[] {
     const result = [];
     const descendants = element.querySelectorAll("[ignoreParentShaders]");
 
@@ -317,57 +317,95 @@ export function getScreenshotIgnoredDescendants(element : HTMLElement) : string[
 }
 
 /**
- * @brief Hides shader overlay layers and their source elements, saving prior visibility for restore.
- * @param ids Source element ids to hide.
- * @return Number of elements/layers hidden.
+ * Sets the siblings of the elements visible or not using setElementVisible
+ * @param element element
+ * @param visible visibility of its siblings to set
+ * @returns void
  */
-export function hideShaderLayers(ids : string[]) : number {
-    let hiddenCount : number = 0;
-    const idSet = new Set(ids);
+export function setSiblingsVisible(element: HTMLElement, visible: boolean): void {
+    const parent = element.parentElement;
 
-    const layers = document.querySelectorAll(
-        "[data-shader-source]"
-    ) as NodeListOf<HTMLElement>;
+    if (!parent) {
+        return;
+    }
 
-    for (const layer of layers) { 
-        const source = layer.dataset.shaderSource;
-        if (!source || !idSet.has(source)) {
+    for (const child of parent.children) {
+        if (child === element) {
             continue;
         }
 
-        if (!layer.dataset.shaderPreviousVisibilityStored) {
-            layer.dataset.shaderPreviousVisibilityStored = "true";
-            layer.dataset.shaderPreviousVisibility = layer.style.visibility;
+        if (child instanceof HTMLElement) {
+            setElementVisible(child, visible);
+        }
+    }
+}
+
+
+/**
+ * Sets an element's inline visibility to hidden or restores its previous inline visibility (CSS) value.
+ * When hiding an element, its current inline visibility value is stored once so that it can be restored when the element is made visible again.
+ * @param element The element whose visibility to set.
+ * @param visible Whether the element should be visible.
+ * @returns void
+*/
+export function setElementVisible(element: HTMLElement, visible: boolean): void {
+    if (!visible) {
+        // Only remember the original value once.
+        if (!element.dataset.shaderPreviousVisibilityStored) {
+            element.dataset.shaderPreviousVisibilityStored = "true";
+            element.dataset.shaderPreviousVisibility = element.style.visibility;
         }
 
-        layer.style.visibility = "hidden";
-        hiddenCount++;
+        element.style.visibility = "hidden";
+        return;
     }
 
-    for (const id of ids) {
-        const el = document.getElementById(id);
-        if (!el) {
-            continue;
-        }
+    // Restore the original inline visibility.
+    if (element.dataset.shaderPreviousVisibilityStored) {
+        element.style.visibility =
+            element.dataset.shaderPreviousVisibility ?? "";
 
-        if (!el.dataset.shaderPreviousVisibilityStored) {
-            el.dataset.shaderPreviousVisibilityStored = "true";
-            el.dataset.shaderPreviousVisibility = el.style.visibility;
-        }
-
-        el.style.visibility = "hidden";
-        hiddenCount++;
+        delete element.dataset.shaderPreviousVisibilityStored;
+        delete element.dataset.shaderPreviousVisibility;
+    } else {
+        // If we didn't hide it ourselves, make it visible.
+        element.style.visibility = "";
     }
-
-    return hiddenCount;
 }
 
 /**
- * @brief Restores visibility previously saved by hideShaderLayers.
- * @param ids Source element ids to restore.
+ * Sets shader overlay layers and their source elements visible or hidden.
+ * [data-shader-source]
+ * When hiding, the current inline visibility is saved so it can be restored when the elements are made visible again.
+ * @param ids Source element ids to update.
+ * @param visible Whether the elements should be visible.
+ * @return Number of elements/layers hidden or shown.
  */
-export function showShaderLayers(ids : string[]) {
+export function setShaderLayersVisible(ids: string[], visible: boolean): number {
+    let count = 0;
     const idSet = new Set(ids);
+
+    const setVisibility = (element: HTMLElement) => {
+        if (!visible) {
+            // Only save the original value once.
+            if (element.dataset.shaderPreviousVisibilityStored !== "true") {
+                element.dataset.shaderPreviousVisibilityStored = "true";
+                element.dataset.shaderPreviousVisibility = element.style.visibility;
+            }
+
+            element.style.visibility = "hidden";
+            return;
+        }
+
+        // Restore the original inline visibility.
+        if (element.dataset.shaderPreviousVisibilityStored === "true") {
+            element.style.visibility =
+                element.dataset.shaderPreviousVisibility ?? "";
+
+            delete element.dataset.shaderPreviousVisibility;
+            delete element.dataset.shaderPreviousVisibilityStored;
+        }
+    };
 
     const layers = document.querySelectorAll(
         "[data-shader-source]"
@@ -379,13 +417,8 @@ export function showShaderLayers(ids : string[]) {
             continue;
         }
 
-        if (layer.dataset.shaderPreviousVisibilityStored !== "true") {
-            continue;
-        }
-
-        layer.style.visibility = layer.dataset.shaderPreviousVisibility || "";
-        delete layer.dataset.shaderPreviousVisibility;
-        delete layer.dataset.shaderPreviousVisibilityStored;
+        setVisibility(layer);
+        count++;
     }
 
     for (const id of ids) {
@@ -394,15 +427,13 @@ export function showShaderLayers(ids : string[]) {
             continue;
         }
 
-        if (el.dataset.shaderPreviousVisibilityStored !== "true") {
-            continue;
-        }
-
-        el.style.visibility = el.dataset.shaderPreviousVisibility || "";
-        delete el.dataset.shaderPreviousVisibility;
-        delete el.dataset.shaderPreviousVisibilityStored;
+        setVisibility(el);
+        count++;
     }
+
+    return count;
 }
+
 
 /**
  * @brief Hides an element now that its shader overlay stands in for it; un-hides
