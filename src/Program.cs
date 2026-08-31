@@ -1,7 +1,14 @@
 ﻿using Markdig;
 using ShaderMarkdown.Rendering;
 
-var markdown = File.ReadAllText("markdown/TestSuite.md");
+string inputPath = "markdown/TestSuite.md";
+string outputPath = "output/TestSuite2.gif";
+
+
+ShaderInfo? backgroundShaderInfo = ShaderInfo.FromShaderFileName("driftingSquares.frag", new ShaderParameters(0.0f, 0.01f, new ())); 
+ShaderInfo? outerShaderInfo = ShaderInfo.FromShaderFileName("halfBright.frag", new());
+
+var markdown = File.ReadAllText(inputPath);
 
 var pipeline = new MarkdownPipelineBuilder()
     .UseAdvancedExtensions()
@@ -10,23 +17,22 @@ var pipeline = new MarkdownPipelineBuilder()
 var html = Markdown.ToHtml(markdown, pipeline);
 
 var shaderProcessor = new ShaderProcessor();
-
 var renderer = new HtmlShaderRenderer(shaderProcessor);
 
-ShaderInfo backgroundShaderInfo = ShaderInfo.FromShaderFileName("test.frag"); 
-string outputPath = "output/TestSuite2.gif";
-
+var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 await renderer.RenderAsync(
     html: html,
     outputPath: outputPath,
     width: 800,
     height: 100,
-    fps: 3,
+    fps: 10,
     duration: 1,
     scale: 4,
     backgroundColor: " #0d1117",
     backgroundShaderInfo: backgroundShaderInfo,
-    outerShaderInfo: null 
+    outerShaderInfo: outerShaderInfo
 );
+stopwatch.Stop();
 
-Console.WriteLine($"Rendered to {outputPath}");
+
+Console.WriteLine($"Shaderized {inputPath} to {outputPath} in {stopwatch.Elapsed.TotalSeconds:F2} seconds.");
