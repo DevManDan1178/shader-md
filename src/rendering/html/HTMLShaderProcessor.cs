@@ -74,13 +74,14 @@ public class HTMLShaderProcessor {
 
         await CreateShaderLayerContainersAsync(page);
 
+        // Cannot multithread because element processing order matters
         foreach (var idInfo in shaderIds) {
             string id = idInfo.Id;
-            Console.WriteLine($"Shaderizing element {(idInfo.Idx + 1)} of {shaderIds.Length}.");
-
+            
             var element = page.Locator($"#{id}");
             var shader = await element.GetAttributeAsync(SHADER_KEY);
             var shaderBg = await element.GetAttributeAsync(SHADER_BG_KEY);
+            Console.WriteLine($"Shaderizing element {idInfo.Idx + 1} of {shaderIds.Length} - shader property: {shader ?? "None"}, shader-bg property: {shaderBg ?? "None"}");
 
             if (!string.IsNullOrWhiteSpace(shaderBg)) {
                 var box = await element.BoundingBoxAsync();
@@ -91,15 +92,15 @@ public class HTMLShaderProcessor {
 
                     var shader_params = await element.GetAttributeAsync(SHADER_BG_PARAMETERS_KEY);   
                     var frames = await _shaderProcessor.ApplyAnimatedToRectAsync(
-                        page, 
+                        page.Context, 
                         bgWidth, 
                         bgHeight, 
+                        fps, 
+                        duration,
                         ShaderInfo.FromShaderFileName(
                             shaderBg, 
                             ShaderParameters.ParseShaderParameters(shader_params)
-                        ), 
-                        fps, 
-                        duration
+                        )
                     );
 
                     for (int frameIdx = 0; frameIdx < frameCount; frameIdx++) {
@@ -117,14 +118,14 @@ public class HTMLShaderProcessor {
                 var shader_params = await element.GetAttributeAsync(SHADER_PARAMETERS_KEY);
 
                 var frames = await _shaderProcessor.ApplyAnimatedAsync(
-                    page, 
-                    screenshot, 
+                    page.Context, 
+                    screenshot,   
+                    fps, 
+                    duration,
                     ShaderInfo.FromShaderFileName(
                         shader, 
                         ShaderParameters.ParseShaderParameters(shader_params)
-                    ), 
-                    fps, 
-                    duration
+                    )
                 );
 
                 for (int frameIdx = 0; frameIdx < frameCount; frameIdx++) {
