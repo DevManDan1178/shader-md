@@ -99,7 +99,7 @@ public class HtmlShaderRenderer {
 
         if (outerShaderInfo != null) {
             Console.WriteLine($"Applying outer shader to document: {outerShaderInfo.ShaderPath}");
-            documentFrames = await _shaderProcessor.ApplyOverAnimatedAsync(page.Context, documentFrames, fps, duration, outerShaderInfo);
+            documentFrames = await _shaderProcessor.ApplyOverAnimatedAsync(page.Context, documentFrames, fps, outerShaderInfo);
         }
         Console.WriteLine("Exporting.");
         await GifBuilder.SaveGifAsync(documentFrames, fps, outputPath);

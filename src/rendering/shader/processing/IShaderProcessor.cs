@@ -18,11 +18,14 @@ public interface IShaderProcessor {
         IBrowserContext browserContext, 
         byte[][] frames, 
         int framesPerSecond, 
-        float duration,
         ShaderInfo shaderInfo
     ) {
+
+        if (framesPerSecond <= 0) {
+            throw new ArgumentOutOfRangeException(nameof(framesPerSecond));
+        }
+
         byte[][] shaderizedFrames = new byte[frames.Length][];
-        
         
         // Cannot shortcut if timescale == 0 since initial frames can be different
         float timeScale = shaderInfo.ShaderParameters.TimeScale;
