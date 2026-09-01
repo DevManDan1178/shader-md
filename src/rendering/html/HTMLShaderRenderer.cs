@@ -48,7 +48,8 @@ public class HtmlShaderRenderer {
 
         var page = await browserContext.NewPageAsync();
 
-        await _shaderProcessor.LoadPageShaderScript(page);
+        await _shaderProcessor.LoadPageShaderRenderer(page);
+        await _shaderProcessor.LoadPageStaticShaderRenderer(page);
         
         await HTMLDocument.LoadPageDocumentFunctions(page);
 
@@ -90,11 +91,13 @@ public class HtmlShaderRenderer {
         } 
         
         Console.WriteLine($"Now compositing.");
-        
+        string currentDocumentHtml = await page.ContentAsync();
         byte[][] documentFrames = await GetDocumentFramesAsync(
             page, 
+            currentDocumentHtml,
             processed, 
-            documentBackgroundFrames
+            documentBackgroundFrames,
+            page.Context
         );
 
         if (outerShaderInfo != null) {
@@ -148,89 +151,81 @@ public class HtmlShaderRenderer {
     }
 
 
-    const int COMPOSITING_THREADS_COUNT = 4;
     private async Task<byte[][]> GetDocumentFramesAsync(
         IPage page,
+        string documentHtml,
         (
             IReadOnlyList<byte[]>[] frames, 
             IReadOnlyList<ILocator> elements, 
             IReadOnlyList<byte[]>[]? backgroundFrames, 
             IReadOnlyList<ILocator>? backgroundElements
         ) processed,
-        byte[][]? documentBackgroundFrames
+        byte[][]? documentBackgroundFrames,
+        IBrowserContext browserContext
     ) {
-        
+        const int MAXIMUM_WORKER_COUNT = 10;
+        const int MINIMUM_FRAMES_PER_WORKER = 3;
         IReadOnlyList<byte[]>[] processedFrames = processed.frames;
         IReadOnlyList<ILocator> processedElements = processed.elements;
-
         IReadOnlyList<byte[]>[]? processedBackgroundFrames = processed.backgroundFrames;
         IReadOnlyList<ILocator>? processedBackgroundElements = processed.backgroundElements;
 
         byte[][] documentFrames = new byte[processedFrames.Length][];
 
-        // No race conditions since every thread writes to different frames independently
-        await Task.WhenAll(
-            Enumerable.Range(0, COMPOSITING_THREADS_COUNT)
-                .Select(async (workerIdx) => {
-                    for (int frameIdx = 0 + workerIdx; frameIdx < processedFrames.Length; frameIdx += COMPOSITING_THREADS_COUNT) {
-                        Console.WriteLine("Compositing frame " + (frameIdx + 1).ToString() + " of " + processedFrames.Length + " total");
+        async Task RenderFrameOnPage(IPage workerPage, int frameIdx) {
+            Console.WriteLine("Compositing frame " + (frameIdx + 1) + " of " + processedFrames.Length + " total");
 
-                        // ---------------
-                        // Regular Shaders
-                        // ---------------
+            IReadOnlyList<byte[]> frameElements = processedFrames[frameIdx];
+            for (int elementIdx = 0; elementIdx < frameElements.Count; ++elementIdx) {
+                await HTMLDocument.SetElementImageAsync(
+                    workerPage.Locator($"#{await processedElements[elementIdx].GetAttributeAsync("id")}"),
+                    frameElements[elementIdx]
+                );
+            }
 
-                        IReadOnlyList<byte[]> frameElements = processedFrames[frameIdx];
-
-                        for (int elementIdx = 0; elementIdx < frameElements.Count; ++elementIdx) {
-                            await HTMLDocument.SetElementImageAsync(
-                                processedElements[elementIdx],
-                                frameElements[elementIdx]
-                            );
-                        }
-
-                        // --------------------------
-                        // Element background Shaders
-                        // --------------------------
-
-                        if (processedBackgroundFrames != null && processedBackgroundElements != null) {
-                            var frameBackgrounds = processedBackgroundFrames[frameIdx];
-
-                            for (int bgIdx = 0; bgIdx < frameBackgrounds.Count; ++bgIdx) {
-                                await HTMLDocument.SetElementImageAsync(
-                                    processedBackgroundElements[bgIdx],
-                                    frameBackgrounds[bgIdx]);
-                            }
-                        }
-
-                        // ------------------
-                        // Background Shaders
-                        // ------------------
-
-                        if (documentBackgroundFrames != null) {
-                            var backgroundImage = page.Locator($"#{DOCUMENT_BACKGROUND_ID}");
-
-                            await HTMLDocument.SetElementImageAsync(
-                                backgroundImage,
-                                documentBackgroundFrames[frameIdx]
-                            );
-                        }
-
-
-                        // -----------------
-                        // Apply to the page
-                        // -----------------
-
-                        await page.WaitForTimeoutAsync(PAGE_SCREENSHOT_WAIT_TIME);
-
-                        documentFrames[frameIdx] = await page.ScreenshotAsync(new() {
-                            FullPage = true,
-                        });
-                    }
+            if (processedBackgroundFrames != null && processedBackgroundElements != null) {
+                var frameBackgrounds = processedBackgroundFrames[frameIdx];
+                for (int bgIdx = 0; bgIdx < frameBackgrounds.Count; ++bgIdx) {
+                    await HTMLDocument.SetElementImageAsync(
+                        workerPage.Locator($"#{await processedBackgroundElements[bgIdx].GetAttributeAsync("id")}"),
+                        frameBackgrounds[bgIdx]
+                    );
                 }
-            )
+            }
+
+            if (documentBackgroundFrames != null) {
+                var backgroundImage = workerPage.Locator($"#{DOCUMENT_BACKGROUND_ID}");
+                await HTMLDocument.SetElementImageAsync(backgroundImage, documentBackgroundFrames[frameIdx]);
+            }
+
+            await workerPage.WaitForTimeoutAsync(PAGE_SCREENSHOT_WAIT_TIME);
+
+            documentFrames[frameIdx] = await workerPage.ScreenshotAsync(new() { FullPage = true });
+        }
+
+        int workerCount = Math.Max(1, Math.Min(MAXIMUM_WORKER_COUNT, processedFrames.Length / MINIMUM_FRAMES_PER_WORKER));
+
+        await Task.WhenAll(
+            Enumerable.Range(0, workerCount)
+                .Select(async workerIdx => {
+                    IPage workerPage = workerIdx == 0 ? page : await browserContext.NewPageAsync();
+
+                    if (workerIdx != 0) {
+                        await workerPage.SetContentAsync(documentHtml);
+                        await workerPage.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                        await workerPage.EvaluateAsync("() => document.fonts.ready");
+                    }
+
+                    for (int frameIdx = workerIdx; frameIdx < processedFrames.Length; frameIdx += workerCount) {
+                        await RenderFrameOnPage(workerPage, frameIdx);
+                    }
+
+                    if (workerIdx != 0) {
+                        await workerPage.CloseAsync();
+                    }
+                })
         );
+
         return documentFrames;
     }
-
-   
 }
