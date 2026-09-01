@@ -70,7 +70,7 @@ public class HTMLShaderProcessor {
             () => DocumentFunctions.getShadersDeepestFirst()
             """
         );
-        Console.WriteLine($"Found {shaderIds.Length} {SHADER_KEY}/{SHADER_BG_KEY}/{IGNORE_PARENT_SHADERS_KEY} elements.");
+        Console.WriteLine($"Found {shaderIds.Length} elements to shaderize.");
 
         await CreateShaderLayerContainersAsync(page);
 
@@ -81,7 +81,7 @@ public class HTMLShaderProcessor {
             var element = page.Locator($"#{id}");
             var shader = await element.GetAttributeAsync(SHADER_KEY);
             var shaderBg = await element.GetAttributeAsync(SHADER_BG_KEY);
-            Console.WriteLine($"Shaderizing element {idInfo.Idx + 1} of {shaderIds.Length} - shader property: {shader ?? "None"}, shader-bg property: {shaderBg ?? "None"}");
+            Console.WriteLine($"Shaderizing element {idInfo.Idx + 1} of {shaderIds.Length}");
 
             if (!string.IsNullOrWhiteSpace(shaderBg)) {
                 var box = await element.BoundingBoxAsync();
@@ -117,7 +117,7 @@ public class HTMLShaderProcessor {
 
                 var shader_params = await element.GetAttributeAsync(SHADER_PARAMETERS_KEY);
 
-                var frames = await _shaderProcessor.ApplyAnimatedAsync(
+                var frames = await _shaderProcessor.ApplyOverStaticAsync(
                     page.Context, 
                     screenshot,   
                     fps, 
