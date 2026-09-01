@@ -16,33 +16,41 @@ public class ShaderProcessor : IShaderProcessor {
         public byte[] Pixels { get; set; } = [];
     }
 
-    private readonly string _shaderDirectory;
-    private readonly string _rendererPath;
-
     public ShaderProcessor() {
-        _shaderDirectory = FilePaths.Directories.DEFAULT_SHADER_DIRECTORY;
-        _rendererPath = FilePaths.WebScriptPaths.SHADER_RENDERER;
     }
 
-    const string PAGE_SHADER_SCRIPT_LOADED_FLAG = "__shaderRendererLoaded";
-    public async Task LoadPageShaderScript(IPage page) {
+    const string PAGE_SHADER_RENDERER_LOADED_FLAG = "__shaderRendererLoaded";
+    const string PAGE_STATIC_SHADER_RENDERER_LOADED_FLAG = "__staticShaderRendererLoaded";
+
+    private async Task LoadPageScript(IPage page, string scriptPath, string scriptLoadedFlag) {
         var alreadyLoaded = await page.EvaluateAsync<bool>(
-            $"() => !!window.{PAGE_SHADER_SCRIPT_LOADED_FLAG}"
+            $"() => !!window.{scriptLoadedFlag}"
         );
 
         if (!alreadyLoaded) {
-            var rendererSource = await File.ReadAllTextAsync(_rendererPath);
+            var rendererSource = await File.ReadAllTextAsync(scriptPath);
 
             await page.AddScriptTagAsync(new() {
                 Content = rendererSource
             });
 
-            await page.EvaluateAsync("() => { window." + PAGE_SHADER_SCRIPT_LOADED_FLAG + " = true; }");
+            await page.EvaluateAsync("() => { window." + scriptLoadedFlag + " = true; }");
         }
+    }
+    public async Task LoadPageShaderRenderer(IPage page) {
+        await LoadPageScript(page, FilePaths.WebScriptPaths.SHADER_RENDERER, PAGE_SHADER_RENDERER_LOADED_FLAG);
+    }
+
+    public async Task LoadPageStaticShaderRenderer(IPage page) {
+         await LoadPageScript(page, FilePaths.WebScriptPaths.STATIC_SHADER_RENDERER, PAGE_STATIC_SHADER_RENDERER_LOADED_FLAG);
     }
 
     public async Task<byte[]> ApplyAsync(IPage page, byte[] image, ShaderInfo shaderInfo, float shaderTime) {
-
+        if (! await page.EvaluateAsync<bool>(
+            $"() => !!window.{PAGE_SHADER_RENDERER_LOADED_FLAG}"
+        )) {
+            throw new Exception("Shader renderer not loaded"); 
+        }
         if (!File.Exists(shaderInfo.ShaderPath)) {
             Console.WriteLine(shaderInfo.ShaderPath);
             throw new FileNotFoundException($"Shader not found: {shaderInfo.ShaderPath}\nAre you sure \"{Path.GetFileName(shaderInfo.ShaderPath)}\" is the correct file name?");
@@ -50,8 +58,8 @@ public class ShaderProcessor : IShaderProcessor {
 
         var source = await File.ReadAllTextAsync(shaderInfo.ShaderPath);
 
-        if (!File.Exists(_rendererPath)) {
-            throw new FileNotFoundException($"Shader renderer JavaScript not found: \"{_rendererPath}\".");
+        if (!File.Exists(FilePaths.WebScriptPaths.SHADER_RENDERER)) {
+            throw new FileNotFoundException($"Shader renderer JavaScript not found: \"{FilePaths.WebScriptPaths.SHADER_RENDERER}\".");
         }
 
         var imageBase64 = Convert.ToBase64String(image);
@@ -83,5 +91,68 @@ public class ShaderProcessor : IShaderProcessor {
         img.SaveAsPng(ms);
 
         return ms.ToArray();
+    }
+
+    public async Task<byte[][]> ApplyStaticBatchAsync(IPage page, byte[] image, ShaderInfo shaderInfo, float[] shaderTimes) {
+        if (! await page.EvaluateAsync<bool>(
+            $"() => !!window.{PAGE_STATIC_SHADER_RENDERER_LOADED_FLAG}"
+        )) {
+            throw new Exception("Static shader renderer not loaded"); 
+        }
+        if (shaderTimes.Length == 0) {
+            return [];
+        }
+
+        if (!File.Exists(shaderInfo.ShaderPath)) {
+            Console.WriteLine(shaderInfo.ShaderPath);
+            throw new FileNotFoundException($"Shader not found: {shaderInfo.ShaderPath}\nAre you sure \"{Path.GetFileName(shaderInfo.ShaderPath)}\" is the correct file name?");
+        }
+
+        var source = await File.ReadAllTextAsync(shaderInfo.ShaderPath);
+
+        if (!File.Exists(FilePaths.WebScriptPaths.STATIC_SHADER_RENDERER)) {
+            throw new FileNotFoundException($"Static shader renderer JavaScript not found: \"{FilePaths.WebScriptPaths.STATIC_SHADER_RENDERER}\".");
+        }
+
+        var imageBase64 = Convert.ToBase64String(image);
+
+        // Same shaderProperties for every frame in this batch - serialize once.
+        var shaderPropertiesJson = JsonSerializer.Serialize(shaderInfo.ShaderParameters.ShaderProperties);
+
+        var frameArgs = shaderTimes
+            .Select(time => new {
+                time = (double) time, // Breaks shaders when not casting to (double)
+                shaderProperties = shaderPropertiesJson
+            })
+            .ToArray();
+
+        RawFrameResult[] results = await page.EvaluateAsync<RawFrameResult[]>(
+            """
+            async (args) => {
+                for (const frame of args.frames) {
+                    frame.shaderProperties = JSON.parse(frame.shaderProperties);
+                }
+
+                return await StaticShaderRenderer.renderStaticShaderBatchRaw(args);
+            }
+            """,
+            new {
+                imageBase64,
+                fragmentSource = source,
+                shaderPath = shaderInfo.ShaderPath,
+                frames = frameArgs
+            }
+        );
+
+        var output = new byte[results.Length][];
+
+        for (int i = 0; i < results.Length; i++) {
+            using var img = Image.LoadPixelData<Rgba32>(results[i].Pixels, results[i].Width, results[i].Height);
+            using var ms = new MemoryStream();
+            img.SaveAsPng(ms);
+            output[i] = ms.ToArray();
+        }
+
+        return output;
     }
 }
