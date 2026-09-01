@@ -1,8 +1,9 @@
 {
   "private": true,
   "scripts": {
-    "build": "npm run build:render-shader && npm run build:document-functions",
-    "build:render-shader": "esbuild web/ShaderRenderer.ts --bundle --format=iife --global-name=ShaderRenderer --outfile=generated/ShaderRenderer.js",
+    "build": "npm run build:shader-renderer && npm run build:static-shader-renderer && npm run build:document-functions",
+    "build:static-shader-renderer": "esbuild web/shader/StaticShaderRenderer.ts --bundle --format=iife --global-name=StaticShaderRenderer --outfile=generated/StaticShaderRenderer.js",
+    "build:shader-renderer": "esbuild web/shader/ShaderRenderer.ts --bundle --format=iife --global-name=ShaderRenderer --outfile=generated/ShaderRenderer.js",
     "build:document-functions": "esbuild web/DocumentFunctions.ts --bundle --format=iife --global-name=DocumentFunctions --outfile=generated/DocumentFunctions.js"
   },
   "devDependencies": {
