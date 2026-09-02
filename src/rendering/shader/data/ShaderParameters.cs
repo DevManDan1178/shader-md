@@ -19,12 +19,7 @@ public class ShaderParameters {
         ShaderProperties = shaderProperties;
     }
     
-    public static ShaderParameters ParseShaderParameters(string? json) {
-        if (string.IsNullOrEmpty(json)) {
-            return new ShaderParameters();
-        }
-
-        Dictionary<string, JsonElement>? parameters = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json);
+    public static ShaderParameters ParseShaderParameters(Dictionary<string, JsonElement>? parameters) {
         if (parameters == null) {
             return new ShaderParameters();
         }
@@ -44,5 +39,14 @@ public class ShaderParameters {
             : DEFAULT_TIMESCALE_PARAMETER;
 
         return new ShaderParameters(time, timeScale, parameters){};
+    }
+    public static ShaderParameters ParseShaderParameters(string? json) {
+        if (string.IsNullOrEmpty(json)) {
+            return new ShaderParameters();
+        }
+
+        return ParseShaderParameters(
+            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json)
+        );
     }
 }
