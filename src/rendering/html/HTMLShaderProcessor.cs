@@ -10,6 +10,7 @@ public class HTMLShaderProcessor {
 
     public HTMLShaderProcessor(IShaderProcessor shaderProcessor) {
         _shaderProcessor = shaderProcessor;
+
     }
 
     const string SHADER_KEY = "shader";
@@ -51,7 +52,7 @@ public class HTMLShaderProcessor {
         IReadOnlyList<ILocator> elements,
         IReadOnlyList<byte[]>[]? backgroundFrames,
         IReadOnlyList<ILocator>? backgroundElements
-    )> ProcessShadersAsync(IPage page, int fps = 30, float duration = 1f) {
+    )> ProcessShadersAsync(IPage page, string shadersRootDirectory, int fps, float duration) {
         int frameCount = _shaderProcessor.GetShaderFrameCount(fps, duration);
         
         var processedElements = new List<ILocator>();
@@ -98,6 +99,7 @@ public class HTMLShaderProcessor {
                         fps, 
                         duration,
                         ShaderInfo.FromShaderFileName(
+                            shadersRootDirectory,
                             shaderBg, 
                             ShaderParameters.ParseShaderParameters(shader_params)
                         )
@@ -123,6 +125,7 @@ public class HTMLShaderProcessor {
                     fps, 
                     duration,
                     ShaderInfo.FromShaderFileName(
+                        shadersRootDirectory,
                         shader, 
                         ShaderParameters.ParseShaderParameters(shader_params)
                     )
