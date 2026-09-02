@@ -26,7 +26,7 @@ class ShaderRenderer {
     }>();
 
     private readonly defaultShaderProperties: ShaderProperties;
-
+    
     /**
      * Serializes render calls on this renderer so concurrent frames
      * (different images, same shader) don't interleave texture upload,
@@ -38,8 +38,6 @@ class ShaderRenderer {
         canvas: OffscreenCanvas,
         gl: WebGL2RenderingContext,
         program: WebGLProgram,
-        positionBuffer: WebGLBuffer,
-        uvBuffer: WebGLBuffer,
         texture: WebGLTexture,
         defaultShaderProperties: ShaderProperties
     ) {
@@ -170,7 +168,7 @@ class ShaderRenderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
         const renderer = new ShaderRenderer(
-            canvas, gl, program, positionBuffer, uvBuffer, texture, defaultShaderProperties
+            canvas, gl, program, texture, defaultShaderProperties
         );
 
         gl.useProgram(program);
