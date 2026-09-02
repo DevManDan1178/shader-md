@@ -4,6 +4,16 @@ type IdInfo = {
     Depth: number,
 }[];
 
+type ElementShaderConfig = {
+    Content: ShaderInfo;
+    Background: ShaderInfo;
+};
+
+type ShaderInfo = {
+    ShaderPath : string;
+    ShaderParameters : Record<string, any>;
+};
+
 const SHADER_ID_PREFIX = "shader-";
 const SHADER_OUTPUT_CLASSNAME = "shader-output";
 
@@ -13,12 +23,135 @@ const IGNORE_PARENT_SHADERS_KEY = "ignoreParentShaders";
 
 const SHADER_FOREGROUND_ID = "shader-foreground-layer";
 
+const HIDE_DESCENDANT_SHADERS_STYLE = `
+    html.hide-descendant-shaders
+    .${SHADER_OUTPUT_CLASSNAME}[data-shader-descendant="true"] {
+        display: none !important;
+    }
+`
+
+const ShaderSelectors: Record<string, string> = {
+    heading1: "h1",
+    heading2: "h2",
+    heading3: "h3",
+    heading4: "h4",
+    heading5: "h5",
+    heading6: "h6",
+
+    default: "p",
+
+    blockquote: "blockquote",
+
+    bold: "strong, b",
+    italic: "em, i",
+    bold_italic: "strong em, em strong",
+
+    strikethrough: "del, s",
+
+    inline_code: "code",
+    code_block: "pre",
+
+    link: "a",
+    image: "img",
+
+    unordered_list: "ul",
+    ordered_list: "ol",
+
+    horizontal_rule: "hr",
+
+    table: "table",
+    table_header: "th",
+    table_cell: "td",
+
+    task_list: "li",
+    task_checkbox: 'input[type="checkbox"]',
+};
+
 /**
  * @brief Wraps raw HTML in a full document with the base stylesheet.
  * @param html Body content to embed.
+ * @param defaultPageShadersParams The default shader parameters for the document, linking each html element type to default shaders and uniforms (or none)
  * @return Complete HTML document string.
  */
-export function createDocument(html: string): string {
+export function createShaderizedDocument(html: string, defaultPageShaders? : Record<string, ElementShaderConfig>): string {
+    function getShaderStyle(shaderInfo: ShaderInfo, isBackground: boolean): string {
+        const key = isBackground ? SHADER_BG_KEY : SHADER_KEY;
+        const parameters = shaderInfo.ShaderParameters ?? {};
+
+        return `${key}="${shaderInfo.ShaderPath}"` +
+            (Object.keys(parameters).length > 0
+                ? JSON.stringify(parameters)
+                : "");
+    }
+
+    function applyDefaultShaderStyles(html: string): string {
+        if (!defaultPageShaders) {
+            console.log("no default shaders");
+            return html;
+        }
+
+        for (const [shaderName, selector] of Object.entries(ShaderSelectors)) {
+            const config = defaultPageShaders[shaderName];
+
+            if (!config) {
+                continue;
+            }
+
+            for (const individualSelector of selector.split(",")) {
+                const tag = individualSelector.trim();
+
+                if (tag.startsWith("input[") || tag.includes(" ")) {
+                    continue;
+                }
+
+                html = html.replace(
+                    new RegExp(`<${tag}(\\s[^>]*)?>`, "gi"),
+                    (match, existingAttributes = "") => {
+                        const hasShader = new RegExp(
+                            `(?:^|\\s)${SHADER_KEY}\\s*=`,
+                            "i"
+                        ).test(existingAttributes);
+
+                        const hasShaderBg = new RegExp(
+                            `(?:^|\\s)${SHADER_BG_KEY}\\s*=`,
+                            "i"
+                        ).test(existingAttributes);
+
+                        const attributesToAdd: string[] = [];
+
+                        if (!hasShader && config.Content?.ShaderPath) {
+                            attributesToAdd.push(
+                                getShaderStyle(config.Content, false)
+                            );
+                        }
+
+                        if (!hasShaderBg && config.Background?.ShaderPath) {
+                            attributesToAdd.push(
+                                getShaderStyle(config.Background, true)
+                            );
+                        }
+
+                        if (attributesToAdd.length === 0) {
+                            return match;
+                        }
+
+                        return `<${tag}${existingAttributes} ${attributesToAdd.join(" ")}>`;
+                    }
+                );
+            }
+        }
+        console.log(html);
+        return html;
+    }
+
+    
+    return createHTMLPage(
+        HIDE_DESCENDANT_SHADERS_STYLE, 
+        applyDefaultShaderStyles(html)
+    );
+}
+
+function createHTMLPage(extraStyle : string, pageContent : string) : string {
     return `
         <!DOCTYPE html>
         <html>
@@ -31,10 +164,7 @@ export function createDocument(html: string): string {
                         background: transparent;
                     }
 
-                    html.hide-descendant-shaders
-                    .${SHADER_OUTPUT_CLASSNAME}[data-shader-descendant="true"] {
-                        display: none !important;
-                    }
+                    ${extraStyle}
 
                     body {
                         margin: 0;
@@ -73,10 +203,10 @@ export function createDocument(html: string): string {
             </head>
 
             <body>
-                ${html}
+                ${pageContent}
             </body>
         </html>
-    `;
+    `
 }
 
 /**
