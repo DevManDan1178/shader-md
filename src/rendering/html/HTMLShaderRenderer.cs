@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using ShaderMarkdown.Config;
 using ShaderMarkdown.HTML;
 
 namespace ShaderMarkdown.Rendering;
@@ -25,15 +26,14 @@ public class HtmlShaderRenderer {
 
     public async Task RenderAsync(
         string html,
+        ShaderConfig shaderConfig,
         string outputPath,
         int width = 1200,
         int height = 800,
         int fps = 30,
         float duration = 1f,
         float scale = 2,
-        string backgroundColor = "#0d1117",
-        ShaderInfo? backgroundShaderInfo = null,
-        ShaderInfo? outerShaderInfo = null
+        string backgroundColor = "#0d1117"
     ) {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
@@ -47,12 +47,6 @@ public class HtmlShaderRenderer {
         });
 
         var page = await browserContext.NewPageAsync();
-
-        await _shaderProcessor.LoadPageShaderRenderer(page);
-        await _shaderProcessor.LoadPageStaticShaderRenderer(page);
-        
-        await HTMLDocument.LoadPageDocumentFunctions(page);
-
         page.Console += (_, msg) => {
             if (msg.Text.Contains("GPU stall due to ReadPixels")) {  
                 // Unavoidable warning       
@@ -60,12 +54,19 @@ public class HtmlShaderRenderer {
             }
             Console.WriteLine($"[Browser] {msg.Type}: {msg.Text}");
         };
+        await _shaderProcessor.LoadPageShaderRenderer(page);
+        await _shaderProcessor.LoadPageStaticShaderRenderer(page);
+        
+        await HTMLDocument.LoadPageDocumentFunctions(page);
 
         var fullHtml = await page.EvaluateAsync<string>(
             """
-                html => DocumentFunctions.createDocument(html)
+                (args) => DocumentFunctions.createShaderizedDocument(args.pageHtml, args.pageShaderParameters)
             """,
-            html
+            new {
+                pageHtml = html,
+                pageShaderParameters = shaderConfig.DefaultPageElementShaders,
+            }
         );
         
         await page.SetContentAsync(fullHtml);
@@ -78,16 +79,17 @@ public class HtmlShaderRenderer {
         Console.WriteLine($"Shaderizing document. Size: {documentSize.Width}x{documentSize.Height}.");
 
         Console.WriteLine("Processing shaders.");
-        var processed = await _htmlShaderProcessor.ProcessShadersAsync(page, fps, duration);
+        var processed = await _htmlShaderProcessor.ProcessShadersAsync(page, shaderConfig.ShadersRootDirectory, fps, duration);
         
  
         byte[][]? documentBackgroundFrames = null;
-        if (backgroundShaderInfo == null) {
+        SerializableShaderInfo? backgroundShader = shaderConfig.DocumentShaders.Background;
+        if (backgroundShader == null) {
             Console.WriteLine("Setting page background");
             await HTMLDocument.SetPageBackgroundAsync(page, backgroundColor);
         } else {
             Console.WriteLine("Shaderizing page background");
-            documentBackgroundFrames = await GetDocumentBackgroundFrames(page, documentSize, fps, duration, backgroundColor, backgroundShaderInfo);
+            documentBackgroundFrames = await GetDocumentBackgroundFrames(page, documentSize, fps, duration, backgroundColor, backgroundShader.ToShaderInfo(shaderConfig.ShadersRootDirectory));
         } 
         
         Console.WriteLine($"Now compositing.");
@@ -100,9 +102,10 @@ public class HtmlShaderRenderer {
             page.Context
         );
 
-        if (outerShaderInfo != null) {
-            Console.WriteLine($"Applying outer shader to document: {outerShaderInfo.ShaderPath}");
-            documentFrames = await _shaderProcessor.ApplyOverAnimatedAsync(page.Context, documentFrames, fps, outerShaderInfo);
+        SerializableShaderInfo? finalizeShaderInfo = shaderConfig.DocumentShaders.Finalize;
+        if (finalizeShaderInfo != null) {
+            Console.WriteLine($"Apoplying finalize shader to document: {finalizeShaderInfo.ShaderPath}");
+            documentFrames = await _shaderProcessor.ApplyOverAnimatedAsync(page.Context, documentFrames, fps, finalizeShaderInfo.ToShaderInfo(shaderConfig.ShadersRootDirectory));
         }
         Console.WriteLine("Exporting.");
         await GifBuilder.SaveGifAsync(documentFrames, fps, outputPath);
