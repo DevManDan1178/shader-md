@@ -1,0 +1,234 @@
+
+# EVERY SHADER AS RELATIVE PATH FROM shader_root_directory
+
+shaders_root_directory:
+  # ABSOLUTE PATH to the shader root directory
+
+document_shaders:
+  # Document-wide background
+  background:
+    shader_path:
+    shader_parameters:
+
+  # Applied to the whole shaderized document, as a final shader
+  finalize:
+    shader_path:
+    shader_parameters:
+
+default_page_element_shaders:
+  heading1:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  heading2:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  heading3:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  heading4:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  heading5:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  heading6:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # Normal paragraph text
+  default:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path: 
+      shader_parameters:
+
+  # > Blockquote
+  blockquote:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # **bold**
+  bold:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # *italic*
+  italic:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # ***bold italic***
+  bold_italic:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # ~~strikethrough~~
+  strikethrough:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # `inline code`
+  inline_code:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # [link](...)
+  link:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # ![image](...)
+  image:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # - unordered list
+  unordered_list:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # 1. ordered list
+  ordered_list:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # List bullet / number itself
+  list_marker:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # - [ ] / - [x]
+  task_list:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # - [ ] / - [x] checkbox itself
+  task_checkbox:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # ```code```
+  code_block:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # Horizontal rule: ---
+  horizontal_rule:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  # Table
+  table:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  table_header:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
+
+  table_cell:
+    content:
+      shader_path:
+      shader_parameters:
+    background:
+      shader_path:
+      shader_parameters:
