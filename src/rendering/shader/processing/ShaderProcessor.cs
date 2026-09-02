@@ -46,6 +46,9 @@ public class ShaderProcessor : IShaderProcessor {
     }
 
     public async Task<byte[]> ApplyAsync(IPage page, byte[] image, ShaderInfo shaderInfo, float shaderTime) {
+        if (shaderInfo.ShaderPath.Trim() == "") {
+            return image;
+        }
         if (! await page.EvaluateAsync<bool>(
             $"() => !!window.{PAGE_SHADER_RENDERER_LOADED_FLAG}"
         )) {
@@ -94,6 +97,13 @@ public class ShaderProcessor : IShaderProcessor {
     }
 
     public async Task<byte[][]> ApplyStaticBatchAsync(IPage page, byte[] image, ShaderInfo shaderInfo, float[] shaderTimes) {
+        if (shaderInfo.ShaderPath.Trim() == "") {
+            byte[][] frames = new byte[shaderTimes.Length][];
+            for (int i = 0; i < frames.Length; ++i) {
+                frames[i] = image;
+            }
+            return frames;
+        }
         if (! await page.EvaluateAsync<bool>(
             $"() => !!window.{PAGE_STATIC_SHADER_RENDERER_LOADED_FLAG}"
         )) {
