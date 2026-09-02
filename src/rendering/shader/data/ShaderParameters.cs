@@ -35,7 +35,7 @@ public class ShaderParameters {
             : DEFAULT_TIME_PARAMETER;
 
         float timeScale = timeScaleValue.ValueKind == JsonValueKind.Number
-            ? (float) timeValue.GetDouble()
+            ? (float) timeScaleValue.GetDouble()
             : DEFAULT_TIMESCALE_PARAMETER;
 
         return new ShaderParameters(time, timeScale, parameters){};
