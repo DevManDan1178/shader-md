@@ -78,10 +78,11 @@ export function createShaderizedDocument(html: string, defaultPageShaders? : Rec
         const key = isBackground ? SHADER_BG_KEY : SHADER_KEY;
         const parameters = shaderInfo.ShaderParameters ?? {};
 
-        return `${key}="${shaderInfo.ShaderPath}"` +
-            (Object.keys(parameters).length > 0
-                ? JSON.stringify(parameters)
-                : "");
+        let result = `${key}="${shaderInfo.ShaderPath}"`;
+        if (Object.keys(parameters).length > 0) {
+            result += ` shader-params=\'${JSON.stringify(parameters)}\'`;
+        }
+        return result;
     }
 
     function applyDefaultShaderStyles(html: string): string {

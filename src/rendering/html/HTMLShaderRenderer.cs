@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Playwright;
 using ShaderMarkdown.Config;
 using ShaderMarkdown.HTML;
@@ -61,11 +62,14 @@ public class HtmlShaderRenderer {
 
         var fullHtml = await page.EvaluateAsync<string>(
             """
-                (args) => DocumentFunctions.createShaderizedDocument(args.pageHtml, args.pageShaderParameters)
+                (args) => {
+                const pageShaderParameters = JSON.parse(args.pageShaderParameters);
+                    return DocumentFunctions.createShaderizedDocument(args.pageHtml, pageShaderParameters)
+                }
             """,
             new {
                 pageHtml = html,
-                pageShaderParameters = shaderConfig.DefaultPageElementShaders,
+                pageShaderParameters = JsonSerializer.Serialize(shaderConfig.DefaultPageElementShaders),
             }
         );
         
