@@ -46,7 +46,7 @@ public interface IShaderProcessor {
         float timeScale = shaderInfo.ShaderParameters.TimeScale;
         float shaderInitialTime = shaderInfo.ShaderParameters.Time;  
         
-        int workerCount = frames.Length < MINIMUM_MULTITHREADING_FRAME_COUNT ? 1 : Math.Min(SHADER_THREADS_COUNT, frames.Length);
+        int workerCount = frames.Length < MINIMUM_MULTITHREADING_FRAME_COUNT ? 1 : Math.Min(SHADER_THREADS_COUNT, frames.Length / MIN_FRAMES_PER_WORKER);
         
         await Task.WhenAll(
             Enumerable.Range(0, workerCount)
