@@ -1,13 +1,14 @@
+
+using System.Text.Json;
 using ShaderMarkdown.FilePaths;
 using ShaderMarkdown.Rendering;
+using YamlDotNet.Core;
+using YamlDotNet.Core.Events;
+using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
 namespace ShaderMarkdown.Config;
 
-using System.Text.Json;
-using YamlDotNet.Core;
-using YamlDotNet.Core.Events;
-using YamlDotNet.Serialization;
 
 public sealed class JsonElementYamlTypeConverter : IYamlTypeConverter
 {
