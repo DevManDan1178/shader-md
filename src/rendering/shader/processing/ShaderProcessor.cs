@@ -96,7 +96,8 @@ public class ShaderProcessor : IShaderProcessor {
         return ms.ToArray();
     }
 
-    public async Task<byte[][]> ApplyStaticBatchAsync(IPage page, byte[] image, ShaderInfo shaderInfo, float[] shaderTimes) {
+    const long MAX_BATCH_SIZE_BYTES = 256 * 1024L * 1024L;
+    public async Task<byte[][]> ApplyStaticBatchAsync(IPage page, byte[] image, int imageWidth, int imageHeight, ShaderInfo shaderInfo, float[] shaderTimes) {
         if (shaderInfo.ShaderPath.Trim() == "") {
             byte[][] frames = new byte[shaderTimes.Length][];
             for (int i = 0; i < frames.Length; ++i) {
@@ -109,6 +110,10 @@ public class ShaderProcessor : IShaderProcessor {
         )) {
             throw new Exception("Static shader renderer not loaded"); 
         }
+        if (imageWidth <= 0 || imageHeight <= 0) {
+            throw new ArgumentOutOfRangeException("Image dimensions must be greater than zero.");
+        }
+
         if (shaderTimes.Length == 0) {
             return [];
         }
@@ -123,36 +128,53 @@ public class ShaderProcessor : IShaderProcessor {
         if (!File.Exists(FilePaths.WebScriptPaths.STATIC_SHADER_RENDERER)) {
             throw new FileNotFoundException($"Static shader renderer JavaScript not found: \"{FilePaths.WebScriptPaths.STATIC_SHADER_RENDERER}\".");
         }
-
+        
         var imageBase64 = Convert.ToBase64String(image);
-
-        // Same shaderProperties for every frame in this batch - serialize once.
         var shaderPropertiesJson = JsonSerializer.Serialize(shaderInfo.ShaderParameters.ShaderProperties);
 
-        var frameArgs = shaderTimes
-            .Select(time => new {
-                time = (double) time, // Breaks shaders when not casting to (double)
-                shaderProperties = shaderPropertiesJson
-            })
-            .ToArray();
+        long frameSizeBytes = (long)imageWidth * imageHeight * 4;
+        int framesPerBatch = Math.Max(1, (int)(MAX_BATCH_SIZE_BYTES / frameSizeBytes));
 
-        RawFrameResult[] results = await page.EvaluateAsync<RawFrameResult[]>(
-            """
-            async (args) => {
-                for (const frame of args.frames) {
-                    frame.shaderProperties = JSON.parse(frame.shaderProperties);
+        RawFrameResult[] results = new RawFrameResult[shaderTimes.Length];
+        for (int batchStart = 0; batchStart < shaderTimes.Length; batchStart += framesPerBatch) {
+            
+            int batchSize = Math.Min(
+                framesPerBatch,
+                shaderTimes.Length - batchStart
+            );
+
+            var batchFrames = new object[batchSize];
+
+            for (int i = 0; i < batchSize; i++) {;
+                batchFrames[i] = new {
+                    time = (double) shaderTimes[i], // Breaks shaders when not casting to (double)
+                    shaderProperties = shaderPropertiesJson
+                };
+            }
+
+            RawFrameResult[] batchResults = await page.EvaluateAsync<RawFrameResult[]>(
+                """
+                    async (args) => {
+                        return await StaticShaderRenderer.renderStaticShaderBatchRaw(args);
+                    }
+                """,
+                new {
+                    imageBase64,
+                    fragmentSource = source,
+                    shaderPath = shaderInfo.ShaderPath,
+                    frames = batchFrames
                 }
+            );
 
-                return await StaticShaderRenderer.renderStaticShaderBatchRaw(args);
-            }
-            """,
-            new {
-                imageBase64,
-                fragmentSource = source,
-                shaderPath = shaderInfo.ShaderPath,
-                frames = frameArgs
-            }
-        );
+            Array.Copy(
+                batchResults,
+                0,
+                results,
+                batchStart,
+                batchResults.Length
+            );
+        }
+                
 
         var output = new byte[results.Length][];
 
