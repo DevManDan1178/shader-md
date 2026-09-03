@@ -3,21 +3,22 @@ using System.CommandLine;
 public class CommandLineOptions {
     const int DEFAULT_WIDTH = 800;
     const int DEFAULT_HEIGHT = 0;
-    const int DEFAULT_FPS = 10;
-    const float DEFAULT_SCALE = 2f;
+    const int DEFAULT_FPS = 5;
+    const float DEFAULT_SCALE = 1f;
     const float DEFAULT_DURATION = 1f;
+    const bool DEFAULT_REVERSE_LOOP_FROM_END = false;
     public required FileInfo Input { get; init; }
-    public required FileInfo Config { get; init; }
+    public required FileInfo ShaderConfig { get; init; }
     public required FileInfo Output { get; init; }
 
-    public int Width { get; init; } = 800;
-    public int Height { get; init; } = 100;
-    public int FPS { get; init; } = 10;
+    public int Width { get; init; } = DEFAULT_WIDTH;
+    public int Height { get; init; } = DEFAULT_HEIGHT;
+    public int FPS { get; init; } = DEFAULT_FPS;
 
-    public float Scale { get; init; } = 2.0f;
-    public float Duration { get; init; } = 2.0f;
+    public float Scale { get; init; } = DEFAULT_SCALE;
+    public float Duration { get; init; } = DEFAULT_DURATION;
 
-    public bool ReverseLoopFromEnd { get; init; }
+    public bool ReverseLoopFromEnd { get; init; } = DEFAULT_REVERSE_LOOP_FROM_END;
 
     public static CommandLineOptions? ParseCommandLineArgs(string[] args) {
         if (args.Contains("--help") || args.Contains("-h") || args.Contains("-?")) {
@@ -66,7 +67,8 @@ public class CommandLineOptions {
         };
 
         var reverseOption = new Option<bool>("--reverseloop") {
-            Description = "Reverse the animation after ending for seamless looping."
+            Description = "Reverse the animation after ending for seamless looping.",
+            DefaultValueFactory = _ => DEFAULT_REVERSE_LOOP_FROM_END
         };
 
         var rootCommand = new RootCommand("Converts a Markdown document into a shaderized document.");
@@ -89,7 +91,7 @@ public class CommandLineOptions {
 
         return new CommandLineOptions {
             Input = parseResult.GetValue(inputArgument)!,
-            Config = parseResult.GetValue(configOption)!,
+            ShaderConfig = parseResult.GetValue(configOption)!,
             Output = parseResult.GetValue(outputOption)!,
             Width = parseResult.GetValue(widthOption),
             Height = parseResult.GetValue(heightOption),
