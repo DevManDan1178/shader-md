@@ -116,12 +116,22 @@ public class HTMLShaderProcessor {
 
             if (!string.IsNullOrWhiteSpace(shader)) {
                 var screenshot = await ScreenshotForShaderAsync(element);
+                var box = await element.BoundingBoxAsync();
 
+                if (box == null) {
+                    throw new InvalidOperationException( $"Could not determine dimensions for shader element.");
+                }
+
+                int width = Math.Max(1, (int)Math.Ceiling(box.Width));
+                int height = Math.Max(1, (int)Math.Ceiling(box.Height));
+                
                 var shader_params = await element.GetAttributeAsync(SHADER_PARAMETERS_KEY);
 
                 var frames = await _shaderProcessor.ApplyOverStaticAsync(
                     page.Context, 
-                    screenshot,   
+                    screenshot,  
+                    width,
+                    height, 
                     fps, 
                     duration,
                     ShaderInfo.FromShaderFileName(
@@ -137,9 +147,7 @@ public class HTMLShaderProcessor {
 
                 var shaderLayer = await CreateShaderLayerAsync(element, frames[0], idInfo.Depth, background: false);
                 processedElements.Add(shaderLayer);
-            }
 
-            if (!string.IsNullOrWhiteSpace(shader)) {
                 await element.EvaluateAsync(
                     """
                     (element) => DocumentFunctions.hideOriginalElement(element)

@@ -88,11 +88,13 @@ public interface IShaderProcessor {
     async Task<byte[][]> ApplyOverStaticAsync(
         IBrowserContext browserContext, 
         byte[] image, 
+        int imageWidth,
+        int imageHeight,
         int framesPerSecond, 
         float duration,
         ShaderInfo shaderInfo
     ) {
-        const int MIN_FRAMES_PER_WORKER = 10;
+        const int MIN_FRAMES_PER_WORKER = 5;
         if (framesPerSecond <= 0) {
             throw new ArgumentOutOfRangeException(nameof(framesPerSecond));
         }
@@ -137,7 +139,7 @@ public interface IShaderProcessor {
             IPage page = await browserContext.NewPageAsync();
             await LoadPageStaticShaderRenderer(page);
             
-            frames = await ApplyStaticBatchAsync(page, image, shaderInfo, shaderTimes);
+            frames = await ApplyStaticBatchAsync(page, image, imageWidth, imageHeight, shaderInfo, shaderTimes);
 
             await page.CloseAsync();
             return frames;
@@ -161,7 +163,7 @@ public interface IShaderProcessor {
                         frame => shaderTimes[frame]
                     ).ToArray();
 
-                    byte[][] workerResults = await ApplyStaticBatchAsync(page, image, shaderInfo, workerShaderTimes);
+                    byte[][] workerResults = await ApplyStaticBatchAsync(page, image, imageWidth, imageHeight, shaderInfo, workerShaderTimes);
 
                     for (int i = 0; i < frameIndices.Count; i++) {
                         frames[frameIndices[i]] = workerResults[i];
@@ -201,7 +203,9 @@ public interface IShaderProcessor {
 
         return await ApplyOverStaticAsync(
             context,
-            stream.ToArray(), 
+            stream.ToArray(),
+            width,
+            height, 
             framesPerSecond,
             duration,
             shaderInfo
@@ -229,7 +233,7 @@ public interface IShaderProcessor {
     /// <param name="image">The single image shared by every frame in this batch</param>
     /// <param name="shaderInfo">The shader information</param>
     /// <param name="shaderTimes">One time value per output frame</param>
-    Task<byte[][]> ApplyStaticBatchAsync(IPage page, byte[] image, ShaderInfo shaderInfo, float[] shaderTimes);
+    Task<byte[][]> ApplyStaticBatchAsync(IPage page, byte[] image, int imageWidth, int imageHeight, ShaderInfo shaderInfo, float[] shaderTimes);
 
 }
 
