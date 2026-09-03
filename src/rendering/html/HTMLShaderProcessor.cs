@@ -14,9 +14,9 @@ public class HTMLShaderProcessor {
     }
 
     const string SHADER_KEY = "shader";
-    const string SHADER_PARAMETERS_KEY = $"{SHADER_KEY}-params";
+    const string SHADER_PARAMETERS_KEY = $"shader-params";
     const string SHADER_BG_KEY = "shader-bg";
-    const string SHADER_BG_PARAMETERS_KEY  = $"{SHADER_BG_KEY}-params";
+    const string SHADER_BG_PARAMETERS_KEY  = $"shader-bg-params";
     const string IGNORE_PARENT_SHADERS_KEY = "ignoreParentShaders";
     const string SHADER_OUTPUT_CLASSNAME = "shader-output";
 
@@ -82,7 +82,7 @@ public class HTMLShaderProcessor {
             var element = page.Locator($"#{id}");
             var shader = await element.GetAttributeAsync(SHADER_KEY);
             var shaderBg = await element.GetAttributeAsync(SHADER_BG_KEY);
-            Console.WriteLine($"Shaderizing element {idInfo.Idx + 1} of {shaderIds.Length}");
+            Console.WriteLine($"Shaderizing element: {idInfo.Idx + 1}/{shaderIds.Length}.");
 
             if (!string.IsNullOrWhiteSpace(shaderBg)) {
                 var box = await element.BoundingBoxAsync();
