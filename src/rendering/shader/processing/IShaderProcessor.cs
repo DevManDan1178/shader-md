@@ -48,6 +48,7 @@ public interface IShaderProcessor {
         
         int workerCount = frames.Length < MINIMUM_MULTITHREADING_FRAME_COUNT ? 1 : Math.Min(SHADER_THREADS_COUNT, frames.Length / MIN_FRAMES_PER_WORKER);
         
+        int processedFramesCounter = 0;
         await Task.WhenAll(
             Enumerable.Range(0, workerCount)
                 .Select(async (workerIdx) => {
@@ -55,7 +56,8 @@ public interface IShaderProcessor {
                     await LoadPageShaderRenderer(page);
 
                     for (int frame = 0 + workerIdx; frame < frames.Length; frame += workerCount) {
-                        Console.WriteLine($"Shaderizing: document frame {frame + 1} of {frames.Length}.");
+                        int processedCount = Interlocked.Increment(ref processedFramesCounter);
+                        Console.WriteLine($"Shaderizing document frame: {processedCount}/{frames.Length}.");
                         shaderizedFrames[frame] = await ApplyAsync(
                             page, 
                             frames[frame], 
