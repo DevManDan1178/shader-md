@@ -1,76 +1,83 @@
 ﻿using Markdig;
 using ShaderMarkdown.Rendering;
-using ShaderMarkdown.FilePaths;
 using ShaderMarkdown.Config;
+using System.Diagnostics;
 
-string inputPath = "markdown/TestSuite.md";
-string outputPath = "output/TestSuite2.gif";
-
-/*
-ShaderInfo? backgroundShaderInfo = ShaderInfo.FromShaderFileName(shaderRootDirectory, "driftingSquares.frag", new ShaderParameters(0.0f, 0.01f, new()));
-
-ShaderInfo? finalizeShaderInfo = null; //ShaderInfo.FromShaderFileName(shaderRootDirectory,"halfBright.frag", new());
-*/
-var parameters = new ShaderizeDocumentParameters() {
-    Paths = new ShaderizeDocumentParameters.IOPaths {
-        Input = inputPath,
-        Output = outputPath,
-    },
-    DocRenderSettings = new ShaderizeDocumentParameters.RenderSettings  {
-        DocSize = new ShaderizeDocumentParameters.RenderSettings.DocumentSize {
-            Width = 800,
-            Height = 100
+partial class Program {
+    static async Task Main(string[] args) {
+        CommandLineOptions? options = CommandLineOptions.ParseCommandLineArgs(args);
+        if (options == null) {
+            return;
         }
-    },
-    FPS = 10,
-};
-string shaderConfigPath = Path.Combine(AppContext.BaseDirectory, "shaderConfig.yaml");
-if (!File.Exists(shaderConfigPath)) {
-    throw new FileNotFoundException($"Shader config not found: {shaderConfigPath}.");
+        if (!options.Input.Exists) {
+            throw new FileNotFoundException($"Document not found: \"{options.Input}\".");
+        }
+
+        if (!options.ShaderConfig.Exists) {
+            throw new FileNotFoundException($"Shader config not found: \"{options.ShaderConfig}\".");
+        }
+
+        Console.WriteLine($"Input: {options.Input.FullName}, Output: {options.Output.FullName}, Shader Config: {options.ShaderConfig.FullName}");
+
+        ShaderizeDocumentParameters parameters = new ShaderizeDocumentParameters() {
+            Paths = new ShaderizeDocumentParameters.IOPaths {
+                Input = options.Input.FullName,
+                Output = options.Output.FullName,
+            },
+            DocRenderSettings = new ShaderizeDocumentParameters.RenderSettings  {
+                DocSize = new ShaderizeDocumentParameters.RenderSettings.DocumentSize {
+                    Width = options.Width,
+                    Height = options.Height,
+                }
+            },
+            FPS = options.FPS,
+            Scale = options.Scale,
+            Duration = options.Duration,
+            ReverseLoopFromEnd = options.ReverseLoopFromEnd
+        };
+
+        Console.WriteLine("Reading shader configurations");
+        ShaderConfig shaderConfig = ShaderConfig.ReadFromYAML(
+            File.ReadAllText(options.ShaderConfig.FullName)
+        );
+        
+        Stopwatch stopwatch = Stopwatch.StartNew();
+
+        Console.WriteLine("Preparing to shaderize.");
+        
+        await ShaderizeDocument(
+            parameters,
+            shaderConfig
+        );
+
+        stopwatch.Stop();
+        Console.WriteLine($"Shaderized {options.Input.FullName} to {options.Output.FullName} " + $"in {stopwatch.Elapsed.TotalSeconds:F2} seconds.");
+    }
+
+    static async Task ShaderizeDocument(ShaderizeDocumentParameters parameters, ShaderConfig shaderConfig) {
+        string? markdown = File.ReadAllText(parameters.Paths.Input);
+
+        var pipeline = new MarkdownPipelineBuilder()
+            .UseAdvancedExtensions()
+            .Build();
+
+        string? html = Markdown.ToHtml(markdown, pipeline);
+
+        var shaderProcessor = new ShaderProcessor();
+
+        var renderer = new HtmlShaderRenderer(shaderProcessor);
+
+        await renderer.RenderAsync(
+            html: html,
+            shaderConfig,
+            outputPath: parameters.Paths.Output,
+            width: parameters.DocRenderSettings.DocSize.Width,
+            height: parameters.DocRenderSettings.DocSize.Height,
+            fps: parameters.FPS,
+            duration: parameters.Duration,
+            scale: parameters.Scale,
+            reverseLoopFromEnd: parameters.ReverseLoopFromEnd
+        );
+    }
+
 }
-
-ShaderConfig shaderConfig;
-shaderConfig = ShaderConfig.ReadFromYAML(File.ReadAllText(shaderConfigPath));
-
- 
-var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-Console.WriteLine("Preparing to shaderize.");
-
-await ShaderizeDocument(
-    parameters,
-    shaderConfig
-);
-
-stopwatch.Stop();
-
-Console.WriteLine($"Shaderized {inputPath} to {outputPath} " + $"in {stopwatch.Elapsed.TotalSeconds:F2} seconds.");
-
-
-static async Task ShaderizeDocument(ShaderizeDocumentParameters parameters, ShaderConfig shaderConfig) {
-    string? markdown = File.ReadAllText(
-        parameters.Paths.Input
-    );
-
-    var pipeline = new MarkdownPipelineBuilder()
-        .UseAdvancedExtensions()
-        .Build();
-
-    string? html = Markdown.ToHtml(markdown, pipeline);
-
-    var shaderProcessor = new ShaderProcessor();
-
-    var renderer = new HtmlShaderRenderer(shaderProcessor);
-
-    await renderer.RenderAsync(
-        html: html,
-        shaderConfig,
-        outputPath: parameters.Paths.Output,
-        width: parameters.DocRenderSettings.DocSize.Width,
-        height: parameters.DocRenderSettings.DocSize.Height,
-        fps: parameters.FPS,
-        duration: parameters.Duration,
-        scale: parameters.Scale  
-    );
-}
-
