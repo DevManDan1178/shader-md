@@ -86,7 +86,6 @@ public class HtmlShaderRenderer {
         Console.WriteLine("Processing shaders.");
         var processed = await _htmlShaderProcessor.ProcessShadersAsync(page, shaderConfig.ShadersRootDirectory, fps, duration);
         
- 
         byte[][]? documentBackgroundFrames = null;
         SerializableShaderInfo? backgroundShader = shaderConfig.DocumentShaders.Background;
         if (backgroundShader == null) {
@@ -109,7 +108,7 @@ public class HtmlShaderRenderer {
 
         SerializableShaderInfo? finalizeShaderInfo = shaderConfig.DocumentShaders.Finalize;
         if (finalizeShaderInfo != null) {
-            Console.WriteLine($"Apoplying finalize shader to document: {finalizeShaderInfo.ShaderPath}");
+            Console.WriteLine($"Applying finalize shader to document: \"{finalizeShaderInfo.ShaderPath}\".");
             documentFrames = await _shaderProcessor.ApplyOverAnimatedAsync(page.Context, documentFrames, fps, finalizeShaderInfo.ToShaderInfo(shaderConfig.ShadersRootDirectory));
         }
         Console.WriteLine("Exporting.");
