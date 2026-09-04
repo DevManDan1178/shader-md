@@ -58,7 +58,7 @@ public class CommandLineOptions {
 
         var scaleOption = new Option<float>("--scale") {
             Description = "Render scale.",
-            DefaultValueFactory = _ => DEFAULT_FPS
+            DefaultValueFactory = _ => DEFAULT_SCALE
         };
 
         var durationOption = new Option<float>("--duration") {
