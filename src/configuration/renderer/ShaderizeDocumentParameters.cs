@@ -6,8 +6,7 @@ public class ShaderizeDocumentParameters {
         public string Output { get; init; } = "";
     }
 
-    public class RenderSettings
-    {
+    public class RenderSettings {
         public class DocumentSize
         {
             public int Width { get; init; } = 800;
@@ -21,7 +20,8 @@ public class ShaderizeDocumentParameters {
 
     public RenderSettings DocRenderSettings { get; init; } = new();
 
-    public float Duration = 1.0f;
-    public float Scale = 1.0f;
-    public int FPS = 6;
+    public float Duration { get; init; } = 1.0f;
+    public float Scale { get; init; } = 1.0f;
+    public int FPS { get; init; } = 6;
+    public bool ReverseLoopFromEnd { get; init; } = false;
 }

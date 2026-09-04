@@ -33,8 +33,9 @@ public class HtmlShaderRenderer {
         int height = 800,
         int fps = 30,
         float duration = 1f,
-        float scale = 2,
-        string backgroundColor = "#0d1117"
+        float scale = 1f,
+        string backgroundColor = "#0d1117",
+        bool reverseLoopFromEnd = false
     ) {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
@@ -85,15 +86,14 @@ public class HtmlShaderRenderer {
         Console.WriteLine("Processing shaders.");
         var processed = await _htmlShaderProcessor.ProcessShadersAsync(page, shaderConfig.ShadersRootDirectory, fps, duration);
         
- 
         byte[][]? documentBackgroundFrames = null;
-        SerializableShaderInfo? backgroundShader = shaderConfig.DocumentShaders.Background;
-        if (backgroundShader == null) {
-            Console.WriteLine("Setting page background");
-            await HTMLDocument.SetPageBackgroundAsync(page, backgroundColor);
+        SerializableShaderInfo backgroundShaderInfo = shaderConfig.DocumentShaders.Background;
+        if (backgroundShaderInfo.IsValid()) {
+            Console.WriteLine($"Shaderizing page background color: {backgroundColor}.");
+            documentBackgroundFrames = await GetDocumentBackgroundFrames(page, documentSize, fps, duration, backgroundColor, backgroundShaderInfo.ToShaderInfo(shaderConfig.ShadersRootDirectory));
         } else {
-            Console.WriteLine("Shaderizing page background");
-            documentBackgroundFrames = await GetDocumentBackgroundFrames(page, documentSize, fps, duration, backgroundColor, backgroundShader.ToShaderInfo(shaderConfig.ShadersRootDirectory));
+            Console.WriteLine($"Setting page background color: {backgroundColor}.");
+            await HTMLDocument.SetPageBackgroundAsync(page, backgroundColor);
         } 
         
         Console.WriteLine($"Now compositing.");
@@ -106,12 +106,26 @@ public class HtmlShaderRenderer {
             page.Context
         );
 
-        SerializableShaderInfo? finalizeShaderInfo = shaderConfig.DocumentShaders.Finalize;
-        if (finalizeShaderInfo != null) {
-            Console.WriteLine($"Apoplying finalize shader to document: {finalizeShaderInfo.ShaderPath}");
+        SerializableShaderInfo finalizeShaderInfo = shaderConfig.DocumentShaders.Finalize;
+        if (finalizeShaderInfo.IsValid()) {
+            Console.WriteLine($"Applying finalize shader to document: \"{finalizeShaderInfo.ShaderPath}\".");
             documentFrames = await _shaderProcessor.ApplyOverAnimatedAsync(page.Context, documentFrames, fps, finalizeShaderInfo.ToShaderInfo(shaderConfig.ShadersRootDirectory));
         }
+
         Console.WriteLine("Exporting.");
+        if (reverseLoopFromEnd && documentFrames.Length > 2) {
+            // Duplicates every frame EXCEPT last one and first one for the loop
+            byte[][] loopedDocumentFrames = new byte[(documentFrames.Length - 1) * 2][];
+            for (int i = 0; i < documentFrames.Length; ++i) {
+                loopedDocumentFrames[i] = documentFrames[i];
+                if (i > 0 && i < documentFrames.Length - 1) {
+                    int secondFrameIdx = loopedDocumentFrames.Length - i;
+                    loopedDocumentFrames[secondFrameIdx] = documentFrames[i];
+                }
+            }
+            await GifBuilder.SaveGifAsync(loopedDocumentFrames, fps, outputPath);
+            return;
+        }
         await GifBuilder.SaveGifAsync(documentFrames, fps, outputPath);
     }
 
@@ -179,9 +193,7 @@ public class HtmlShaderRenderer {
 
         byte[][] documentFrames = new byte[processedFrames.Length][];
 
-        async Task RenderFrameOnPage(IPage workerPage, int frameIdx) {
-            Console.WriteLine("Compositing frame " + (frameIdx + 1) + " of " + processedFrames.Length + " total");
-
+        async Task renderFrameOnPage(IPage workerPage, int frameIdx) {
             IReadOnlyList<byte[]> frameElements = processedFrames[frameIdx];
             for (int elementIdx = 0; elementIdx < frameElements.Count; ++elementIdx) {
                 await HTMLDocument.SetElementImageAsync(
@@ -212,6 +224,7 @@ public class HtmlShaderRenderer {
 
         int workerCount = Math.Max(1, Math.Min(MAXIMUM_WORKER_COUNT, processedFrames.Length / MINIMUM_FRAMES_PER_WORKER));
 
+        int processedFramesCounter = 0;
         await Task.WhenAll(
             Enumerable.Range(0, workerCount)
                 .Select(async workerIdx => {
@@ -224,7 +237,10 @@ public class HtmlShaderRenderer {
                     }
 
                     for (int frameIdx = workerIdx; frameIdx < processedFrames.Length; frameIdx += workerCount) {
-                        await RenderFrameOnPage(workerPage, frameIdx);
+                        int processedCount = Interlocked.Increment(ref processedFramesCounter);
+                        Console.WriteLine($"Compositing frame: {processedCount}/{processedFrames.Length}");
+
+                        await renderFrameOnPage(workerPage, frameIdx);
                     }
 
                     if (workerIdx != 0) {

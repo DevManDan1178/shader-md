@@ -14,9 +14,9 @@ public class HTMLShaderProcessor {
     }
 
     const string SHADER_KEY = "shader";
-    const string SHADER_PARAMETERS_KEY = $"{SHADER_KEY}-params";
+    const string SHADER_PARAMETERS_KEY = $"shader-params";
     const string SHADER_BG_KEY = "shader-bg";
-    const string SHADER_BG_PARAMETERS_KEY  = $"{SHADER_BG_KEY}-params";
+    const string SHADER_BG_PARAMETERS_KEY  = $"shader-bg-params";
     const string IGNORE_PARENT_SHADERS_KEY = "ignoreParentShaders";
     const string SHADER_OUTPUT_CLASSNAME = "shader-output";
 
@@ -82,7 +82,7 @@ public class HTMLShaderProcessor {
             var element = page.Locator($"#{id}");
             var shader = await element.GetAttributeAsync(SHADER_KEY);
             var shaderBg = await element.GetAttributeAsync(SHADER_BG_KEY);
-            Console.WriteLine($"Shaderizing element {idInfo.Idx + 1} of {shaderIds.Length}");
+            Console.WriteLine($"Shaderizing element: {idInfo.Idx + 1}/{shaderIds.Length}.");
 
             if (!string.IsNullOrWhiteSpace(shaderBg)) {
                 var box = await element.BoundingBoxAsync();
@@ -116,12 +116,22 @@ public class HTMLShaderProcessor {
 
             if (!string.IsNullOrWhiteSpace(shader)) {
                 var screenshot = await ScreenshotForShaderAsync(element);
+                var box = await element.BoundingBoxAsync();
 
+                if (box == null) {
+                    throw new InvalidOperationException( $"Could not determine dimensions for shader element.");
+                }
+
+                int width = Math.Max(1, (int)Math.Ceiling(box.Width));
+                int height = Math.Max(1, (int)Math.Ceiling(box.Height));
+                
                 var shader_params = await element.GetAttributeAsync(SHADER_PARAMETERS_KEY);
 
                 var frames = await _shaderProcessor.ApplyOverStaticAsync(
                     page.Context, 
-                    screenshot,   
+                    screenshot,  
+                    width,
+                    height, 
                     fps, 
                     duration,
                     ShaderInfo.FromShaderFileName(
@@ -137,9 +147,7 @@ public class HTMLShaderProcessor {
 
                 var shaderLayer = await CreateShaderLayerAsync(element, frames[0], idInfo.Depth, background: false);
                 processedElements.Add(shaderLayer);
-            }
 
-            if (!string.IsNullOrWhiteSpace(shader)) {
                 await element.EvaluateAsync(
                     """
                     (element) => DocumentFunctions.hideOriginalElement(element)

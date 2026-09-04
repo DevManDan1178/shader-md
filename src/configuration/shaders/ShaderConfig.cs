@@ -1,13 +1,14 @@
+
+using System.Text.Json;
 using ShaderMarkdown.FilePaths;
 using ShaderMarkdown.Rendering;
+using YamlDotNet.Core;
+using YamlDotNet.Core.Events;
+using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
 namespace ShaderMarkdown.Config;
 
-using System.Text.Json;
-using YamlDotNet.Core;
-using YamlDotNet.Core.Events;
-using YamlDotNet.Serialization;
 
 public sealed class JsonElementYamlTypeConverter : IYamlTypeConverter
 {
@@ -72,8 +73,8 @@ public sealed class JsonElementYamlTypeConverter : IYamlTypeConverter
 
 public class ShaderConfig {
     public class DocumentShadersInfo {
-        public SerializableShaderInfo? Background { get; set; }
-        public SerializableShaderInfo? Finalize { get; set; }
+        public SerializableShaderInfo Background { get; set; } = new();
+        public SerializableShaderInfo Finalize { get; set; } = new();
     }
     public DocumentShadersInfo DocumentShaders { get; set; } = new();
 

@@ -19,6 +19,8 @@ const SHADER_OUTPUT_CLASSNAME = "shader-output";
 
 const SHADER_KEY = "shader";
 const SHADER_BG_KEY = "shader-bg";
+const SHADER_PARAMETERS_KEY = "shader-params"
+const SHADER_BG_PARAMETERS_KEY = "shader-bg-params";
 const IGNORE_PARENT_SHADERS_KEY = "ignoreParentShaders";
 
 const SHADER_FOREGROUND_ID = "shader-foreground-layer";
@@ -80,7 +82,10 @@ export function createShaderizedDocument(html: string, defaultPageShaders? : Rec
 
         let result = `${key}="${shaderInfo.ShaderPath}"`;
         if (Object.keys(parameters).length > 0) {
-            result += ` shader-params=\'${JSON.stringify(parameters)}\'`;
+            result += ` ${isBackground 
+                ? SHADER_BG_PARAMETERS_KEY 
+                : SHADER_PARAMETERS_KEY
+            }=\'${JSON.stringify(parameters)}\'`;
         }
         return result;
     }
@@ -141,7 +146,6 @@ export function createShaderizedDocument(html: string, defaultPageShaders? : Rec
                 );
             }
         }
-        console.log(html);
         return html;
     }
 
