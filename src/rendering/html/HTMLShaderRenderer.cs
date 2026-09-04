@@ -87,13 +87,13 @@ public class HtmlShaderRenderer {
         var processed = await _htmlShaderProcessor.ProcessShadersAsync(page, shaderConfig.ShadersRootDirectory, fps, duration);
         
         byte[][]? documentBackgroundFrames = null;
-        SerializableShaderInfo? backgroundShader = shaderConfig.DocumentShaders.Background;
-        if (backgroundShader == null) {
-            Console.WriteLine("Setting page background");
-            await HTMLDocument.SetPageBackgroundAsync(page, backgroundColor);
+        SerializableShaderInfo? backgroundShaderInfo = shaderConfig.DocumentShaders.Background;
+        if (backgroundShaderInfo?.IsValid() ?? false) {
+            Console.WriteLine($"Shaderizing page background color: {backgroundColor}.");
+            documentBackgroundFrames = await GetDocumentBackgroundFrames(page, documentSize, fps, duration, backgroundColor, backgroundShaderInfo.ToShaderInfo(shaderConfig.ShadersRootDirectory));
         } else {
-            Console.WriteLine("Shaderizing page background");
-            documentBackgroundFrames = await GetDocumentBackgroundFrames(page, documentSize, fps, duration, backgroundColor, backgroundShader.ToShaderInfo(shaderConfig.ShadersRootDirectory));
+            Console.WriteLine($"Setting page background color: {backgroundColor}.");
+            await HTMLDocument.SetPageBackgroundAsync(page, backgroundColor);
         } 
         
         Console.WriteLine($"Now compositing.");
@@ -107,10 +107,11 @@ public class HtmlShaderRenderer {
         );
 
         SerializableShaderInfo? finalizeShaderInfo = shaderConfig.DocumentShaders.Finalize;
-        if (finalizeShaderInfo != null) {
+        if (finalizeShaderInfo?.IsValid() ?? false) {
             Console.WriteLine($"Applying finalize shader to document: \"{finalizeShaderInfo.ShaderPath}\".");
             documentFrames = await _shaderProcessor.ApplyOverAnimatedAsync(page.Context, documentFrames, fps, finalizeShaderInfo.ToShaderInfo(shaderConfig.ShadersRootDirectory));
         }
+
         Console.WriteLine("Exporting.");
         if (reverseLoopFromEnd && documentFrames.Length > 2) {
             // Duplicates every frame EXCEPT last one and first one for the loop
