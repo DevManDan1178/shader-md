@@ -39,4 +39,8 @@ public class SerializableShaderInfo {
             Rendering.ShaderParameters.ParseShaderParameters(ShaderParameters)
         );
     }
+
+    public bool IsValid() {
+        return !string.IsNullOrWhiteSpace(ShaderPath);
+    }
 };
