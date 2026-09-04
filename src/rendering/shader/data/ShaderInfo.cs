@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace ShaderMarkdown.Rendering;
 
 public class ShaderInfo {
-    public string ShaderPath { get; init; }
+    public string ShaderPath { get; init; } = "";
     public ShaderParameters ShaderParameters { get; set; } = new();
 
 
