@@ -40,7 +40,11 @@ partial class Program {
         ShaderConfig shaderConfig = ShaderConfig.ReadFromYAML(
             File.ReadAllText(options.ShaderConfig.FullName)
         );
-        
+        if (string.IsNullOrWhiteSpace(shaderConfig.ShadersRootDirectory)) {
+            throw new ArgumentNullException($"Empty shader root directory path in shader config at \"{options.ShaderConfig.FullName}\".");
+        } else if (!Directory.Exists(shaderConfig.ShadersRootDirectory)) {
+            throw new FileNotFoundException($"Shader root directory not found at path \"{shaderConfig.ShadersRootDirectory}\".");
+        }
         Stopwatch stopwatch = Stopwatch.StartNew();
 
         Console.WriteLine("Preparing to shaderize.");
