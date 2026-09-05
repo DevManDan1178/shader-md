@@ -12,28 +12,20 @@ public static class GifBuilder {
     /// This is the inverse, used for calculating the time between frames (TBF).
     /// TBF = 1/FPS * GIF_FRAME_DELAY_OFFSET (TBF is in units of 0.01s)
     /// </summary>
-    private const float GIF_FRAME_DELAY_OFFSET = 1 / 0.01f;
+    private const float FRAME_DELAY_OFFSET = 1 / 0.01f;
 
     /// <summary>
-    /// Due to TBF unit being 0.01s, lowest TBF is 0.01s.
-    /// Max FPS is the inverse, so it is equivalent to GIF_FRAME_DELAY_OFFSET.
+    /// Due to TBF unit having a lower bound,
+    /// Max FPS is the inverse, so it is equivalent to FRAME_DELAY_OFFSET.
     /// </summary>
-    private const int MAX_POSSIBLE_FPS = (int) GIF_FRAME_DELAY_OFFSET;
+    private const int MAX_POSSIBLE_FPS = (int) FRAME_DELAY_OFFSET;
 
     public static async Task SaveAsync(IReadOnlyList<byte[]> frames, int fps, string outputPath) {
-        if (frames.Count == 0) {
-            throw new ArgumentException("No frames were provided.", nameof(frames));
-        }
-
-        if (fps <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(fps), "FPS must be greater than zero.");
-        }
-
         if (fps > MAX_POSSIBLE_FPS) {
             fps = MAX_POSSIBLE_FPS;
         }
         
-        int frameDelay = Math.Max(1, (int) Math.Round(GIF_FRAME_DELAY_OFFSET / fps));
+        int frameDelay = Math.Max(1, (int) Math.Round(FRAME_DELAY_OFFSET / fps));
 
         using Image<Rgba32> gif = await LoadFrameAsync(frames[0]);
         
