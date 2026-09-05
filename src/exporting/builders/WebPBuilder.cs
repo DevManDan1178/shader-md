@@ -10,9 +10,18 @@ public static class WebPBuilder {
     /// This is the inverse, used for calculating the time between frames (TBF).
     /// TBF = 1/FPS * WebP_FRAME_DELAY_OFFSET (TBF is in units of 0.001s)
     /// </summary>
-    const float WEBP_FRAME_DELAY_OFFSET = 1f / 0.001f;
+    const float FRAME_DELAY_OFFSET = 1f / 0.001f;
+    /// <summary>
+    /// Due to TBF unit having a lower bound
+    /// Max FPS is the inverse, so it is equivalent to FRAME_DELAY_OFFSET.
+    /// </summary>
+    private const int MAX_POSSIBLE_FPS = (int) FRAME_DELAY_OFFSET;
     public static async Task SaveAsync(IReadOnlyList<byte[]> frames, int fps, string outputPath) {
-        int frameDelayMs = Math.Max(1, (int) Math.Round(WEBP_FRAME_DELAY_OFFSET / fps));
+        if (fps > MAX_POSSIBLE_FPS) {
+            fps = MAX_POSSIBLE_FPS;
+        }
+        
+        int frameDelayMs = Math.Max(1, (int) Math.Round(FRAME_DELAY_OFFSET / fps));
 
         using Image<Rgba32> webp = await LoadFrameAsync(frames[0]);
         ConfigureMetadata(webp, frameDelayMs);
