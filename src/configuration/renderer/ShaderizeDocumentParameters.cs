@@ -1,3 +1,5 @@
+using ShaderMarkdown.Files;
+
 namespace ShaderMarkdown.Config;
 
 public class ShaderizeDocumentParameters {

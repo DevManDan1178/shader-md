@@ -1,3 +1,4 @@
+using System.Diagnostics.Contracts;
 using System.Text.Json;
 using Microsoft.Playwright;
 using ShaderMarkdown.Config;
@@ -25,10 +26,10 @@ public class HtmlShaderRenderer {
         _htmlShaderProcessor = new (_shaderProcessor);
     }
 
-    public async Task RenderAsync(
+    [Pure]
+    public async Task<byte[][]> GetShaderizedHTMLAsync(
         string html,
         ShaderConfig shaderConfig,
-        string outputPath,
         int width = 1200,
         int height = 800,
         int fps = 30,
@@ -123,10 +124,9 @@ public class HtmlShaderRenderer {
                     loopedDocumentFrames[secondFrameIdx] = documentFrames[i];
                 }
             }
-            await GifBuilder.SaveGifAsync(loopedDocumentFrames, fps, outputPath);
-            return;
+            return loopedDocumentFrames;
         }
-        await GifBuilder.SaveGifAsync(documentFrames, fps, outputPath);
+        return documentFrames;
     }
 
 

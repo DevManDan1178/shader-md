@@ -1,13 +1,11 @@
-namespace ShaderMarkdown.FilePaths;
-class Directories {
-    public readonly static string DEFAULT_SHADER_DIRECTORY = Path.Combine(AppContext.BaseDirectory, "shaders");
-}
-class WebScriptPaths {
-    const string WEB_SCRIPT_PATH_ROOT = "generated";
+namespace ShaderMarkdown.Files;
+
+public static class WebScriptPaths {
+    const string WEB_SCRIPTS_PATH_ROOT = "generated";
     private static string GetWebScriptPath(string webScriptFileName, params string[] webScriptSubdirectories) {
         return Path.Combine([
             AppContext.BaseDirectory, 
-            WEB_SCRIPT_PATH_ROOT, 
+            WEB_SCRIPTS_PATH_ROOT, 
             ..webScriptSubdirectories, 
             webScriptFileName
         ]);

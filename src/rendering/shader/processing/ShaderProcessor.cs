@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Playwright;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using ShaderMarkdown.Files;
 
 namespace ShaderMarkdown.Rendering;
 
@@ -38,11 +39,11 @@ public class ShaderProcessor : IShaderProcessor {
         }
     }
     public async Task LoadPageShaderRenderer(IPage page) {
-        await LoadPageScript(page, FilePaths.WebScriptPaths.SHADER_RENDERER, PAGE_SHADER_RENDERER_LOADED_FLAG);
+        await LoadPageScript(page, WebScriptPaths.SHADER_RENDERER, PAGE_SHADER_RENDERER_LOADED_FLAG);
     }
 
     public async Task LoadPageStaticShaderRenderer(IPage page) {
-         await LoadPageScript(page, FilePaths.WebScriptPaths.STATIC_SHADER_RENDERER, PAGE_STATIC_SHADER_RENDERER_LOADED_FLAG);
+         await LoadPageScript(page, WebScriptPaths.STATIC_SHADER_RENDERER, PAGE_STATIC_SHADER_RENDERER_LOADED_FLAG);
     }
 
     public async Task<byte[]> ApplyAsync(IPage page, byte[] image, ShaderInfo shaderInfo, float shaderTime) {
@@ -61,8 +62,8 @@ public class ShaderProcessor : IShaderProcessor {
 
         var source = await File.ReadAllTextAsync(shaderInfo.ShaderPath);
 
-        if (!File.Exists(FilePaths.WebScriptPaths.SHADER_RENDERER)) {
-            throw new FileNotFoundException($"Shader renderer JavaScript not found: \"{FilePaths.WebScriptPaths.SHADER_RENDERER}\".");
+        if (!File.Exists(WebScriptPaths.SHADER_RENDERER)) {
+            throw new FileNotFoundException($"Shader renderer JavaScript not found: \"{WebScriptPaths.SHADER_RENDERER}\".");
         }
 
         var imageBase64 = Convert.ToBase64String(image);
@@ -125,8 +126,8 @@ public class ShaderProcessor : IShaderProcessor {
 
         var source = await File.ReadAllTextAsync(shaderInfo.ShaderPath);
 
-        if (!File.Exists(FilePaths.WebScriptPaths.STATIC_SHADER_RENDERER)) {
-            throw new FileNotFoundException($"Static shader renderer JavaScript not found: \"{FilePaths.WebScriptPaths.STATIC_SHADER_RENDERER}\".");
+        if (!File.Exists(WebScriptPaths.STATIC_SHADER_RENDERER)) {
+            throw new FileNotFoundException($"Static shader renderer JavaScript not found: \"{WebScriptPaths.STATIC_SHADER_RENDERER}\".");
         }
         
         var imageBase64 = Convert.ToBase64String(image);

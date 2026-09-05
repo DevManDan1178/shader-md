@@ -1,6 +1,5 @@
 
 using System.Text.Json;
-using ShaderMarkdown.FilePaths;
 using ShaderMarkdown.Rendering;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
@@ -80,7 +79,7 @@ public class ShaderConfig {
 
     public Dictionary<string, ElementShaderSet> DefaultPageElementShaders { get; set; } = new();
 
-    public string ShadersRootDirectory { get; init; } = Directories.DEFAULT_SHADER_DIRECTORY;
+    public string ShadersRootDirectory { get; init; } = "";
 
     public static ShaderConfig ReadFromYAML(string yamlString) {
         var deserializer = new DeserializerBuilder()
