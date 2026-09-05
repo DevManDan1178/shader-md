@@ -3,7 +3,7 @@ shaders_root_directory:
 
 # EVERY SHADER AS RELATIVE PATH FROM shader_root_directory
 document_shaders:
-  # Document-wide background
+  # Applied to the document background
   background:
     shader_path:
     shader_parameters:
@@ -13,6 +13,7 @@ document_shaders:
     shader_path:
     shader_parameters:
 
+# Applied by default to each element without a manually set property
 default_page_element_shaders:
   heading1:
     content:
