@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using ShaderMarkdown.Files;
 
 namespace ShaderMarkdown.HTML;
 
@@ -71,7 +72,7 @@ class HTMLDocument {
         );
 
         if (!alreadyLoaded) {
-            var documentFunctionsScript = await File.ReadAllTextAsync(FilePaths.WebScriptPaths.DOCUMENT_FUNCTIONS);
+            var documentFunctionsScript = await File.ReadAllTextAsync(WebScriptPaths.DOCUMENT_FUNCTIONS);
 
             await page.AddScriptTagAsync(new() {
                 Content = documentFunctionsScript
