@@ -6,11 +6,9 @@ namespace ShaderMarkdown.Exporting;
 
 public static class APNGBuilder {
     public static async Task SaveAsync(IReadOnlyList<byte[]> frames, int fps, string outputPath) {
-        int frameDelayMs = Math.Max(1, (int) Math.Round(1000.0 / fps));
-
         using Image<Rgba32> apng = await LoadFrameAsync(frames[0]);
         ConfigureRootMetadata(apng);
-        ConfigureFrameMetadata(apng, frameDelayMs);
+        ConfigureFrameMetadata(apng, fps);
 
         for (int i = 1; i < frames.Count; i++) {
             using Image<Rgba32> frame = await LoadFrameAsync(frames[i]);
@@ -23,7 +21,7 @@ public static class APNGBuilder {
                 );
             }
 
-            ConfigureFrameMetadata(frame, frameDelayMs);
+            ConfigureFrameMetadata(frame, fps);
             apng.Frames.AddFrame(frame.Frames.RootFrame);
         }
 
@@ -47,8 +45,8 @@ public static class APNGBuilder {
         meta.RepeatCount = 0;         // 0 = loop forever
     }
 
-    private static void ConfigureFrameMetadata(Image<Rgba32> image, int frameDelayMs) {
+    private static void ConfigureFrameMetadata(Image<Rgba32> image, float fps) {
         var frameMeta = image.Frames.RootFrame.Metadata.GetPngMetadata();
-        frameMeta.FrameDelay = new Rational((uint) frameDelayMs, 1000);
+        frameMeta.FrameDelay = new Rational(1, (uint) fps);
     }
 }
