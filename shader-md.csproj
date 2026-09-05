@@ -6,6 +6,8 @@
     <RootNamespace>shader_md</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+     <!-- Ignoring [Pure] building error -->
+    <WarningsAsErrors>$(WarningsAsErrors);CA1806</WarningsAsErrors>
   </PropertyGroup>
   <PropertyGroup>
     <SixLaborsLicenseFile>sixlabors.lic</SixLaborsLicenseFile>
