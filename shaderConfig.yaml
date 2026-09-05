@@ -1,9 +1,7 @@
-
-# EVERY SHADER AS RELATIVE PATH FROM shader_root_directory
-
 shaders_root_directory:
   # ABSOLUTE PATH to the shader root directory
 
+# EVERY SHADER AS RELATIVE PATH FROM shader_root_directory
 document_shaders:
   # Document-wide background
   background:
