@@ -2,6 +2,8 @@
 using ShaderMarkdown.Rendering;
 using ShaderMarkdown.Config;
 using System.Diagnostics;
+using ShaderMarkdown.Exporting;
+using ShaderMarkdown.Files;
 
 partial class Program {
     static async Task Main(string[] args) {
@@ -15,6 +17,9 @@ partial class Program {
 
         if (!options.ShaderConfig.Exists) {
             throw new FileNotFoundException($"Shader config not found: \"{options.ShaderConfig}\".");
+        }
+        if (FileExtension.GetAnimatedFileExtension(options.Output.FullName) == null) {
+            throw new FormatException($"Output file extension is unsupported: \"{Path.GetExtension(options.Output.Name)}\"");
         }
 
         Console.WriteLine($"Input: {options.Input.FullName}, Output: {options.Output.FullName}, Shader Config: {options.ShaderConfig.FullName}");
@@ -45,6 +50,7 @@ partial class Program {
         } else if (!Directory.Exists(shaderConfig.ShadersRootDirectory)) {
             throw new FileNotFoundException($"Shader root directory not found at path \"{shaderConfig.ShadersRootDirectory}\".");
         }
+
         Stopwatch stopwatch = Stopwatch.StartNew();
 
         Console.WriteLine("Preparing to shaderize.");
@@ -53,7 +59,7 @@ partial class Program {
             parameters,
             shaderConfig
         );
-
+        
         stopwatch.Stop();
         Console.WriteLine($"Shaderized {options.Input.FullName} to {options.Output.FullName} " + $"in {stopwatch.Elapsed.TotalSeconds:F2} seconds.");
     }
@@ -71,10 +77,9 @@ partial class Program {
 
         var renderer = new HtmlShaderRenderer(shaderProcessor);
 
-        await renderer.RenderAsync(
+        byte[][] documentFrames = await renderer.GetShaderizedHTMLAsync(
             html: html,
             shaderConfig,
-            outputPath: parameters.Paths.Output,
             width: parameters.DocRenderSettings.DocSize.Width,
             height: parameters.DocRenderSettings.DocSize.Height,
             fps: parameters.FPS,
@@ -82,6 +87,8 @@ partial class Program {
             scale: parameters.Scale,
             reverseLoopFromEnd: parameters.ReverseLoopFromEnd
         );
+
+        await AnimatedExporter.ExportAnimatedAsync(documentFrames, parameters.FPS, parameters.Paths.Output);
     }
 
 }
