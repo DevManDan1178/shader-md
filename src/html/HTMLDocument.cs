@@ -43,6 +43,8 @@ class HTMLDocument {
     /// <summary>
     /// Gets the full scrollable width and height of the document.
     /// </summary>
+    /// <param name="page">page of the document</param>
+    /// <returns>DocumentSize object with width and</returns>
     public static async Task<DocumentSize> GetDocumentSizeAsync(IPage page) {
         var size = await page.EvaluateAsync<int[]>(
             """
