@@ -545,6 +545,7 @@ function createHTMLPage(extraStyle : string, pageContent : string) : string {
                 html {
                     margin: 15px;
                     background: transparent;
+                    overflow: hidden !important;
                 }
 
                 ${extraStyle}
