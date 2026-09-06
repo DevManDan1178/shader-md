@@ -146,6 +146,7 @@ export function createShaderizedDocument(html: string, defaultPageShaders? : Rec
                 );
             }
         }
+        console.log(html);
         return html;
     }
 
@@ -154,64 +155,6 @@ export function createShaderizedDocument(html: string, defaultPageShaders? : Rec
         HIDE_DESCENDANT_SHADERS_STYLE, 
         applyDefaultShaderStyles(html)
     );
-}
-
-function createHTMLPage(extraStyle : string, pageContent : string) : string {
-    return `
-        <!DOCTYPE html>
-        <html>
-            <head>
-                <meta charset="UTF-8">
-
-                <style>
-                    html {
-                        margin: 15px;
-                        background: transparent;
-                    }
-
-                    ${extraStyle}
-
-                    body {
-                        margin: 0;
-                        padding: 40px;
-                        background: transparent;
-                        color: #c9d1d9;
-                        font-family: Arial, sans-serif;
-                        min-height: 100vh;
-                        height: auto;
-                    }
-
-                    h1 {
-                        color: #ffffff;
-                    }
-
-                    h2 {
-                        color: #ffffff;
-                    }
-
-                    code {
-                        background: #161b22;
-                        padding: 2px 5px;
-                        border-radius: 4px;
-                    }
-
-                    pre {
-                        background: #161b22;
-                        padding: 16px;
-                        border-radius: 8px;
-                    }
-
-                    img {
-                        max-width: 100%;
-                    }
-                </style>
-            </head>
-
-            <body>
-                ${pageContent}
-            </body>
-        </html>
-    `
 }
 
 /**
@@ -588,4 +531,348 @@ export function hideOriginalElement(element : HTMLElement) {
             el.style.visibility = "visible";
         }
     }
+}
+
+
+
+function createHTMLPage(extraStyle : string, pageContent : string) : string {
+    return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+
+            <style>
+                html {
+                    margin: 15px;
+                    background: transparent;
+                }
+
+                ${extraStyle}
+
+                body {
+                    margin: 0;
+                    padding: 40px;
+                    background: transparent;
+                    color: #c9d1d9;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                                Helvetica, Arial, sans-serif;
+                    font-size: 16px;
+                    line-height: 1.6;
+                    min-height: 100vh;
+                    height: auto;
+                }
+
+                /* =========================
+                Headings
+                ========================= */
+
+                h1,
+                h2,
+                h3,
+                h4,
+                h5,
+                h6 {
+                    color: #f0f6fc;
+                    font-weight: 600;
+                    line-height: 1.25;
+                    margin-top: 24px;
+                    margin-bottom: 16px;
+                }
+
+                h1 {
+                    font-size: 2em;
+                    padding-bottom: 0.3em;
+                    border-bottom: 1px solid rgba(240, 246, 252, 0.15);
+                }
+
+                h2 {
+                    font-size: 1.5em;
+                    padding-bottom: 0.3em;
+                    border-bottom: 1px solid rgba(240, 246, 252, 0.15);
+                }
+
+                h3 {
+                    font-size: 1.25em;
+                }
+
+                h4 {
+                    font-size: 1em;
+                }
+
+                h5 {
+                    font-size: 0.875em;
+                }
+
+                h6 {
+                    font-size: 0.85em;
+                    color: #8b949e;
+                }
+
+                /* =========================
+                Paragraphs
+                ========================= */
+
+                p {
+                    margin-top: 0;
+                    margin-bottom: 16px;
+                }
+
+                /* =========================
+                Links
+                ========================= */
+
+                a {
+                    color: #58a6ff;
+                    text-decoration: none;
+                }
+
+                a:hover {
+                    text-decoration: underline;
+                }
+
+                /* =========================
+                Bold / Italic
+                ========================= */
+
+                strong {
+                    color: #f0f6fc;
+                    font-weight: 600;
+                }
+
+                em {
+                    color: #c9d1d9;
+                }
+
+                /* =========================
+                Lists
+                ========================= */
+
+                ul,
+                ol {
+                    margin-top: 0;
+                    margin-bottom: 16px;
+                    padding-left: 2em;
+                }
+
+                li {
+                    margin-top: 0.25em;
+                }
+
+                li + li {
+                    margin-top: 0.25em;
+                }
+
+                /* Nested lists */
+
+                ul ul,
+                ul ol,
+                ol ul,
+                ol ol {
+                    margin-top: 0;
+                    margin-bottom: 0;
+                }
+
+                /* =========================
+                Inline Code
+                ========================= */
+
+                code {
+                    font-family: ui-monospace, SFMono-Regular, SFMono-Regular,
+                                Menlo, Monaco, Consolas, "Liberation Mono",
+                                "Courier New", monospace;
+
+                    font-size: 85%;
+                    background: rgba(110, 118, 129, 0.18);
+                    padding: 0.2em 0.4em;
+                    border-radius: 6px;
+                }
+
+                /* =========================
+                Code Blocks
+                ========================= */
+
+                pre {
+                    margin-top: 0;
+                    margin-bottom: 16px;
+                    padding: 16px;
+
+                    overflow: auto;
+
+                    background: rgba(110, 118, 129, 0.12);
+                    border-radius: 6px;
+                    border: 1px solid rgba(240, 246, 252, 0.08);
+
+                    line-height: 1.45;
+                }
+
+                pre code {
+                    display: block;
+
+                    padding: 0;
+                    margin: 0;
+
+                    background: transparent !important;
+                    border: 0;
+
+                    font-size: 85%;
+                    line-height: 1.45;
+
+                    white-space: pre;
+                }
+
+                /* =========================
+                Blockquotes
+                ========================= */
+
+                blockquote {
+                    margin: 0 0 16px 0;
+                    padding: 0 1em;
+
+                    color: #8b949e;
+
+                    border-left: 0.25em solid #3b434b;
+                }
+
+                blockquote > :first-child {
+                    margin-top: 0;
+                }
+
+                blockquote > :last-child {
+                    margin-bottom: 0;
+                }
+
+                /* =========================
+                Tables
+                ========================= */
+
+                table {
+                    width: 100%;
+                    margin-top: 0;
+                    margin-bottom: 16px;
+
+                    border-spacing: 0;
+                    border-collapse: collapse;
+
+                    display: block;
+                    overflow-x: auto;
+
+                    color: #c9d1d9;
+                }
+
+                th,
+                td {
+                    padding: 6px 13px;
+
+                    border: 1px solid rgba(240, 246, 252, 0.15);
+
+                    text-align: left;
+                }
+
+                th {
+                    color: #f0f6fc;
+                    font-weight: 600;
+                    background: rgba(110, 118, 129, 0.12);
+                }
+
+                tr {
+                    background: transparent;
+                    border-top: 1px solid rgba(240, 246, 252, 0.15);
+                }
+
+                tr:nth-child(2n) {
+                    background: rgba(110, 118, 129, 0.04);
+                }
+
+                /* =========================
+                Horizontal Rule
+                ========================= */
+
+                hr {
+                    height: 0.25em;
+                    padding: 0;
+                    margin: 24px 0;
+
+                    background-color: rgba(240, 246, 252, 0.15);
+
+                    border: 0;
+                }
+
+                /* =========================
+                Images
+                ========================= */
+
+                img {
+                    max-width: 100%;
+                    box-sizing: content-box;
+                }
+
+                /* =========================
+                Task Lists
+                ========================= */
+
+                input[type="checkbox"] {
+                    margin-right: 0.5em;
+                }
+
+                /* =========================
+                Keyboard
+                ========================= */
+
+                kbd {
+                    display: inline-block;
+
+                    padding: 3px 6px;
+
+                    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco,
+                                Consolas, "Liberation Mono", "Courier New",
+                                monospace;
+
+                    font-size: 11px;
+                    line-height: 10px;
+
+                    color: #c9d1d9;
+
+                    background: #161b22;
+
+                    border: 1px solid #6e7681;
+                    border-bottom-color: #6e7681;
+
+                    border-radius: 6px;
+
+                    box-shadow: inset 0 -1px 0 #6e7681;
+                }
+
+                /* =========================
+                Definition / Details
+                ========================= */
+
+                details {
+                    margin-bottom: 16px;
+                }
+
+                summary {
+                    cursor: pointer;
+                    color: #58a6ff;
+                }
+
+                /* =========================
+                First / Last Elements
+                ========================= */
+
+                body > :first-child {
+                    margin-top: 0 !important;
+                }
+
+                body > :last-child {
+                    margin-bottom: 0 !important;
+                }
+            </style>
+        </head>
+
+        <body>
+            ${pageContent}
+        </body>
+    </html>
+    `
 }
