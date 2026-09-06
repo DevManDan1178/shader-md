@@ -50,8 +50,23 @@ public static class WebPBuilder {
     }
 
     private static WebpEncoder CreateEncoder() {
+        /*
         return new WebpEncoder {
             FileFormat = WebpFileFormatType.Lossless,
+        };
+        */
+        return new WebpEncoder {
+            // Size reduction
+            FileFormat = WebpFileFormatType.Lossy, 
+            
+            // 75-80 quality balances unnoticeable compression loss with a dramatic file size drop
+            Quality = 75, 
+            
+            // Slowest option, but yields the best quality/smallest file size
+            Method = WebpEncodingMethod.Level6, 
+            
+            NearLossless = true,
+            NearLosslessQuality = 60
         };
     }
 
