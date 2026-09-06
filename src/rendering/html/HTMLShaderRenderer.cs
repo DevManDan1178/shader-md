@@ -104,6 +104,7 @@ public class HtmlShaderRenderer {
             currentDocumentHtml,
             processed, 
             documentBackgroundFrames,
+            documentSize,
             page.Context
         );
 
@@ -182,6 +183,7 @@ public class HtmlShaderRenderer {
             IReadOnlyList<ILocator>? backgroundElements
         ) processed,
         byte[][]? documentBackgroundFrames,
+        DocumentSize documentSize,
         IBrowserContext browserContext
     ) {
         const int MAXIMUM_WORKER_COUNT = 10;
@@ -218,22 +220,26 @@ public class HtmlShaderRenderer {
             }
 
             await workerPage.WaitForTimeoutAsync(PAGE_SCREENSHOT_WAIT_TIME);
-
-            documentFrames[frameIdx] = await workerPage.ScreenshotAsync(new() { FullPage = true });
+            await workerPage.EvaluateAsync("() => window.scrollTo(0, 0)");
+            
+            documentFrames[frameIdx] = await workerPage.ScreenshotAsync();
         }
 
         int workerCount = Math.Max(1, Math.Min(MAXIMUM_WORKER_COUNT, processedFrames.Length / MINIMUM_FRAMES_PER_WORKER));
 
         int processedFramesCounter = 0;
+        await page.SetViewportSizeAsync(documentSize.Width, documentSize.Height);
+
         await Task.WhenAll(
             Enumerable.Range(0, workerCount)
                 .Select(async workerIdx => {
                     IPage workerPage = workerIdx == 0 ? page : await browserContext.NewPageAsync();
-
+                    
                     if (workerIdx != 0) {
                         await workerPage.SetContentAsync(documentHtml);
                         await workerPage.WaitForLoadStateAsync(LoadState.NetworkIdle);
                         await workerPage.EvaluateAsync("() => document.fonts.ready");
+                        await workerPage.SetViewportSizeAsync(documentSize.Width, documentSize.Height);
                     }
 
                     for (int frameIdx = workerIdx; frameIdx < processedFrames.Length; frameIdx += workerCount) {
