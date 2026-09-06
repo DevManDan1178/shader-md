@@ -56,7 +56,6 @@ public class ShaderProcessor : IShaderProcessor {
             throw new Exception("Shader renderer not loaded"); 
         }
         if (!File.Exists(shaderInfo.ShaderPath)) {
-            Console.WriteLine(shaderInfo.ShaderPath);
             throw new FileNotFoundException($"Shader not found: {shaderInfo.ShaderPath}\nAre you sure \"{Path.GetFileName(shaderInfo.ShaderPath)}\" is the correct file name?");
         }
 
@@ -120,7 +119,6 @@ public class ShaderProcessor : IShaderProcessor {
         }
 
         if (!File.Exists(shaderInfo.ShaderPath)) {
-            Console.WriteLine(shaderInfo.ShaderPath);
             throw new FileNotFoundException($"Shader not found: {shaderInfo.ShaderPath}\nAre you sure \"{Path.GetFileName(shaderInfo.ShaderPath)}\" is the correct file name?");
         }
 
@@ -156,6 +154,11 @@ public class ShaderProcessor : IShaderProcessor {
             RawFrameResult[] batchResults = await page.EvaluateAsync<RawFrameResult[]>(
                 """
                     async (args) => {
+                        args.frames = args.frames.map((val) => ({
+                            time: val.time,
+                            shaderProperties: JSON.parse(val.shaderProperties)
+                        }));
+
                         return await StaticShaderRenderer.renderStaticShaderBatchRaw(args);
                     }
                 """,
@@ -166,6 +169,7 @@ public class ShaderProcessor : IShaderProcessor {
                     frames = batchFrames
                 }
             );
+           
 
             Array.Copy(
                 batchResults,
