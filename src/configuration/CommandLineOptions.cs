@@ -106,6 +106,7 @@ public class CommandLineOptions {
     {
         return $"""
             Usage:
+            
             shader-md <document path> --config <config path> --output <output path> [options]
 
             Options:
@@ -117,6 +118,7 @@ public class CommandLineOptions {
                 --scale <value>     Render scale. [default: {DEFAULT_SCALE}]
                 --duration <value>  Animation duration in seconds. [default: {DEFAULT_DURATION}]
                 --reverseloop       Reverse the animation between bounds for seamless looping.
+            
             -h, --help              Show help and usage information.
         """;
     }
