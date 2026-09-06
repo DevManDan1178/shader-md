@@ -146,7 +146,6 @@ export function createShaderizedDocument(html: string, defaultPageShaders? : Rec
                 );
             }
         }
-        console.log(html);
         return html;
     }
 
