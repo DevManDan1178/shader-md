@@ -10,12 +10,6 @@ namespace ShaderMarkdown.Rendering;
 /// Contains the method to apply shaders and export the readme
 /// </summary>
 public class HtmlShaderRenderer {
-    /// <summary>
-    /// The waiting time before screenshotting, after adding all elements to the page at a frame.
-    /// Gives time for the page to render everything.
-    /// </summary>
-    private const int PAGE_SCREENSHOT_WAIT_TIME = 5;
-
     private const string DOCUMENT_BACKGROUND_ID = "document-background";
 
     
@@ -198,28 +192,26 @@ public class HtmlShaderRenderer {
         async Task renderFrameOnPage(IPage workerPage, int frameIdx) {
             IReadOnlyList<byte[]> frameElements = processedFrames[frameIdx];
             for (int elementIdx = 0; elementIdx < frameElements.Count; ++elementIdx) {
-                await HTMLDocument.SetElementImageAsync(
-                    workerPage.Locator($"#{await processedElements[elementIdx].GetAttributeAsync("id")}"),
-                    frameElements[elementIdx]
-                );
+                ILocator locator = workerPage.Locator($"#{await processedElements[elementIdx].GetAttributeAsync("id")}");
+                await HTMLDocument.SetElementImageAsync(locator, frameElements[elementIdx]);
+                await WaitForImageDecodeAsync(locator);
             }
 
             if (processedBackgroundFrames != null && processedBackgroundElements != null) {
                 var frameBackgrounds = processedBackgroundFrames[frameIdx];
                 for (int bgIdx = 0; bgIdx < frameBackgrounds.Count; ++bgIdx) {
-                    await HTMLDocument.SetElementImageAsync(
-                        workerPage.Locator($"#{await processedBackgroundElements[bgIdx].GetAttributeAsync("id")}"),
-                        frameBackgrounds[bgIdx]
-                    );
+                    ILocator locator = workerPage.Locator($"#{await processedBackgroundElements[bgIdx].GetAttributeAsync("id")}");
+                    await HTMLDocument.SetElementImageAsync(locator, frameBackgrounds[bgIdx]);
+                    await WaitForImageDecodeAsync(locator);
                 }
             }
 
             if (documentBackgroundFrames != null) {
-                var backgroundImage = workerPage.Locator($"#{DOCUMENT_BACKGROUND_ID}");
+                ILocator backgroundImage = workerPage.Locator($"#{DOCUMENT_BACKGROUND_ID}");
                 await HTMLDocument.SetElementImageAsync(backgroundImage, documentBackgroundFrames[frameIdx]);
+                await WaitForImageDecodeAsync(backgroundImage);
             }
 
-            await workerPage.WaitForTimeoutAsync(PAGE_SCREENSHOT_WAIT_TIME);
             await workerPage.EvaluateAsync("() => window.scrollTo(0, 0)");
             
             documentFrames[frameIdx] = await workerPage.ScreenshotAsync();
@@ -256,5 +248,15 @@ public class HtmlShaderRenderer {
         );
 
         return documentFrames;
+    }
+
+    private static async Task WaitForImageDecodeAsync(ILocator locator) {
+        try {
+            await locator.EvaluateAsync(
+                "async (el) => { if (el?.decode) { await el.decode(); } }"
+            );
+        } catch (Exception ex) {
+            Console.WriteLine($"[!] Image decode failed or element unavailable: {ex.Message}");
+        }
     }
 }
