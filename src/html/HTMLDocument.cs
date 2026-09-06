@@ -8,7 +8,7 @@ struct DocumentSize {
     public int Height;
 }
 
-class HTMLDocument {
+static class HTMLDocument {
     /// <summary>
     /// Replaces an image element's source with a base64-encoded PNG data URL.
     /// </summary>
@@ -80,5 +80,34 @@ class HTMLDocument {
                 Content = documentFunctionsScript
             });
         }
+    }
+
+    /// <summary>
+    /// Waits for the img element to fire decode() [when it finishes loading]
+    /// </summary>
+    /// <param name="locator">locator for the image</param>
+    /// <returns>Task for waiting on decode()</returns>
+    public static async Task WaitForImageDecodeAsync(ILocator locator) {
+        try {
+            await locator.EvaluateAsync(
+                "async (el) => { if (el?.decode) { await el.decode(); } }"
+            );
+        } catch (Exception ex) {
+            Console.WriteLine($"[!] Image decode failed or element unavailable: {ex.Message}");
+        }
+    }
+    /// <summary>
+    /// Waits two browser animation frames (after the next frame has been painted)
+    /// </summary>
+    /// <param name="page">Page</param>
+    /// <returns>Task for waiting for two frames</returns>
+    public static async Task WaitForNextPaintAsync(IPage page) {
+        await page.EvaluateAsync(
+            """
+            () => new Promise(resolve => {
+                requestAnimationFrame(() => requestAnimationFrame(resolve));
+            })
+            """
+        );
     }
 }
