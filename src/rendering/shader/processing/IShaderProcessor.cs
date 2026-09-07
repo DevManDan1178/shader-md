@@ -11,6 +11,9 @@ public interface IShaderProcessor {
     const int MAX_SHADER_TASKS_COUNT = 5;
     const int SHADER_THREADS_COUNT = 4;
     const int MINIMUM_MULTITHREADING_FRAME_COUNT = 10;
+
+    bool MultithreadingEnabled => true;
+
     float GetShaderTime(float initialTime, float timeScale, int frame, int framesPerSecond) {
         return initialTime + timeScale * ((float) frame / framesPerSecond);
     }
@@ -46,8 +49,9 @@ public interface IShaderProcessor {
         float timeScale = shaderInfo.ShaderParameters.TimeScale;
         float shaderInitialTime = shaderInfo.ShaderParameters.Time;  
         
-        int workerCount = frames.Length < MINIMUM_MULTITHREADING_FRAME_COUNT ? 1 : Math.Min(SHADER_THREADS_COUNT, frames.Length / MIN_FRAMES_PER_WORKER);
-        
+        int workerCount = MultithreadingEnabled
+            ? frames.Length < MINIMUM_MULTITHREADING_FRAME_COUNT ? 1 : Math.Min(SHADER_THREADS_COUNT, frames.Length / MIN_FRAMES_PER_WORKER)
+            : 1;
         int processedFramesCounter = 0;
         await Task.WhenAll(
             Enumerable.Range(0, workerCount)
@@ -129,8 +133,9 @@ public interface IShaderProcessor {
         }
 
         
-        int workerCount = Math.Max(1, Math.Min(MAX_SHADER_TASKS_COUNT, frames.Length / MIN_FRAMES_PER_WORKER));
-        
+        int workerCount = MultithreadingEnabled 
+            ? Math.Max(1, Math.Min(MAX_SHADER_TASKS_COUNT, frames.Length / MIN_FRAMES_PER_WORKER))
+            : 1;
         float[] shaderTimes = Enumerable.Range(0, frames.Length).Select(
             frame => GetShaderTime(shaderInitialTime, timeScale, frame, framesPerSecond)
         ).ToArray();
@@ -146,7 +151,6 @@ public interface IShaderProcessor {
         }
         
         // No race conditions since every thread writes to different frames independently
-        
         await Task.WhenAll(
             Enumerable.Range(0, workerCount)
                 .Select(async (workerIdx) => {
