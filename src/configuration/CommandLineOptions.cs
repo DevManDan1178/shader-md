@@ -1,4 +1,5 @@
 using System.CommandLine;
+using ShaderMarkdown.Files;
 
 public class CommandLineOptions {
     const int DEFAULT_WIDTH = 800;
@@ -6,10 +7,11 @@ public class CommandLineOptions {
     const int DEFAULT_FPS = 5;
     const float DEFAULT_SCALE = 1f;
     const float DEFAULT_DURATION = 1f;
+    const AnimatedFileExtension DEFAULT_OUTPUT_EXTENSION = AnimatedFileExtension.WEBP;
     const bool DEFAULT_REVERSE_LOOP_FROM_END = false;
-    public required FileInfo Input { get; init; }
+    public required FileSystemInfo Input { get; init; }
     public required FileInfo ShaderConfig { get; init; }
-    public required FileInfo Output { get; init; }
+    public required string Output { get; init; }
 
     public int Width { get; init; } = DEFAULT_WIDTH;
     public int Height { get; init; } = DEFAULT_HEIGHT;
@@ -17,7 +19,7 @@ public class CommandLineOptions {
 
     public float Scale { get; init; } = DEFAULT_SCALE;
     public float Duration { get; init; } = DEFAULT_DURATION;
-
+    public AnimatedFileExtension outputExtension { get; init; } = DEFAULT_OUTPUT_EXTENSION;
     public bool ReverseLoopFromEnd { get; init; } = DEFAULT_REVERSE_LOOP_FROM_END;
 
     public static CommandLineOptions? ParseCommandLineArgs(string[] args) {
@@ -25,21 +27,31 @@ public class CommandLineOptions {
             Console.WriteLine(GetHelpDocumentation());
             return null;
         }
-        var inputArgument = new Argument<FileInfo>("input") {
+        var inputArgument = new Argument<FileSystemInfo>("input") {
             Description = "Path to the Markdown input document.",
         };
 
         var configOption = new Option<FileInfo>("--config") {
             Description = "Path to the shader configuration YAML file.",
             Required = true,
+            Aliases = {"-c"},
         };
-        configOption.Aliases.Add("-c");
 
-        var outputOption = new Option<FileInfo?>("--output") {
+        var outputOption = new Option<string>("--output") {
             Description = "Path to the output document.",
             Required = true,
+            Aliases = {"-o"},
         };
-        outputOption.Aliases.Add("-o");
+
+        var outputExtensionOption = new Option<AnimatedFileExtension>("--outputext") {
+            Description ="File extension of the outputted shaderized documents.",
+            CustomParser = result => {
+                var fileName = result.Tokens.Single().Value;
+                return FileExtension.GetAnimatedFileExtension(fileName) ?? 
+                    throw new ArgumentException($"Unsupported animated file extension: {fileName}");
+            },
+            DefaultValueFactory = _ => DEFAULT_OUTPUT_EXTENSION
+        };
 
         var widthOption = new Option<int>("--width") {
             Description = "Document width in pixels.",
@@ -82,6 +94,7 @@ public class CommandLineOptions {
         rootCommand.Options.Add(scaleOption);
         rootCommand.Options.Add(durationOption);
         rootCommand.Options.Add(reverseOption);
+        rootCommand.Options.Add(outputExtensionOption);
 
         var parseResult = rootCommand.Parse(args);
 
@@ -98,7 +111,8 @@ public class CommandLineOptions {
             FPS = parseResult.GetValue(fpsOption),
             Scale = parseResult.GetValue(scaleOption),
             Duration = parseResult.GetValue(durationOption),
-            ReverseLoopFromEnd = parseResult.GetValue(reverseOption)
+            ReverseLoopFromEnd = parseResult.GetValue(reverseOption),
+            outputExtension = parseResult.GetValue(outputExtensionOption),
         };
     }
 
@@ -117,8 +131,9 @@ public class CommandLineOptions {
                 --fps <value>       Frames per second. [default: {DEFAULT_FPS}]
                 --scale <value>     Render scale. [default: {DEFAULT_SCALE}]
                 --duration <value>  Animation duration in seconds. [default: {DEFAULT_DURATION}]
+                --outputext         File extension of the outputted shaderized documents [default: {DEFAULT_OUTPUT_EXTENSION}]
                 --reverseloop       Reverse the animation between bounds for seamless looping.
-            
+
             -h, --help              Show help and usage information.
         """;
     }
