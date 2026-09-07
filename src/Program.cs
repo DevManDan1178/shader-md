@@ -15,18 +15,29 @@ partial class Program {
         if (!options.Input.Exists) {
             throw new FileNotFoundException($"File not found: \"{options.Input}\".");
         }
+        Console.WriteLine(options.Output);
+        if (Path.Exists(options.Output)) {
+            if (!options.OverwriteExistingFile) {
+                throw new IOException($"File already exists at the output path and \"--oef\" (overwrite existing file) is not set.");
+            }
+            if (Directory.Exists(options.Output)) {
+                Directory.Delete(options.Output, recursive: true);
+            } else {
+                File.Delete(options.Output);
+            }
+        }
         if (!options.ShaderConfig.Exists) {
             throw new FileNotFoundException($"Shader configuration document not found: \"{options.ShaderConfig}\".");
         }
-        
+        Console.WriteLine($"Input: {options.Input};Output: {options.Output};");
         bool shaderizingDirectory = options.Input.Attributes.HasFlag(FileAttributes.Directory);
         
-        if (!shaderizingDirectory) {
-            if (FileExtension.GetAnimatedFileExtension(options.Output) == null) {
-                throw new FormatException($"Output file extension is unsupported: \"{Path.GetExtension(options.Output)}\".");
-            }
+        if (!shaderizingDirectory) {   
             if (!FileExtension.IsSupportedDocumentExtension(options.Input.FullName)) {
                 throw new FormatException($"Document file extension is unsupported: \"{options.Input.FullName}\".");
+            }
+            if (options.VerticalSliceCount <= 1 && FileExtension.GetAnimatedFileExtension(options.Output) == null) {
+                throw new FormatException($"Output file extension is unsupported: \"{Path.GetExtension(options.Output)}\".");
             }
         }
         
@@ -40,13 +51,14 @@ partial class Program {
             FPS = options.FPS,
             Scale = options.Scale,
             Duration = options.Duration,
-            ReverseLoopFromEnd = options.ReverseLoopFromEnd
+            ReverseLoopFromEnd = options.ReverseLoopFromEnd,
+            BackgroundColor = options.BackgroundColor,
         };
 
-        IOPaths paths = new () {
+        IOParameters paths = new () {
             Input = options.Input.FullName,
             Output = options.Output,
-            OutputExtension = (AnimatedFileExtension) options.outputExtension!,
+            OutputExtension = (AnimatedFileExtension) options.OutputExtension!,
         };
 
         ShaderConfig shaderConfig = ShaderConfig.ReadFromYAML(
@@ -68,14 +80,16 @@ partial class Program {
             await ShaderizeDocumentDirectory(
                 parameters,
                 shaderConfig,
-                paths
+                paths,
+                options.VerticalSliceCount
             );
             Console.WriteLine($"Shaderized directory {options.Input.FullName} to {options.Output} " + $"in {stopwatch.Elapsed.TotalSeconds:F2} seconds.");
         } else {
             string? outputPath = await ShaderizeDocument(
                 parameters,
                 shaderConfig,
-                paths
+                paths,
+                options.VerticalSliceCount
             );
             Console.WriteLine(outputPath != null 
                 ? $"Shaderized {options.Input.FullName} to {outputPath} in {stopwatch.Elapsed.TotalSeconds:F2} seconds." 
@@ -95,18 +109,17 @@ partial class Program {
     /// <param name="parameters">Parameters for shaderizing the document</param>
     /// <param name="shaderConfig">Shader configuration parameters</param>
     /// <returns>Task for when it finishes</returns>
-    static async Task ShaderizeDocumentDirectory(ShaderizeDocumentParameters parameters, ShaderConfig shaderConfig, IOPaths paths) {
+    static async Task ShaderizeDocumentDirectory(ShaderizeDocumentParameters parameters, ShaderConfig shaderConfig, IOParameters ioParams, int sliceCount) {
         
         ParallelOptions parallelOptions = new ParallelOptions {
             MaxDegreeOfParallelism = Environment.ProcessorCount
         };
-        // Avoid multithreading on shaders for multithreading on files instead
-        ShaderProcessor shaderProcessor = new ShaderProcessor(false);
-        List<IOPaths> directoryFiles = new();
+        
+        List<IOParameters> directoryFiles = new();
 
         void findDirectoryDocumentsRecursive(string[] subPaths) {
             string directoryPath = Path.Combine([
-                paths.Input,
+                ioParams.Input,
                 ..subPaths
             ]);
             string[] childFiles = Directory.GetFiles(directoryPath);
@@ -115,7 +128,7 @@ partial class Program {
             foreach (string childFilePath in childFiles) {
                 if (FileExtension.IsSupportedDocumentExtension(childFilePath)) {
                     string outputPath = Path.Combine([
-                        paths.Output,
+                        ioParams.Output,
                         ..subPaths,
                         Path.GetFileNameWithoutExtension(childFilePath)
                     ]);
@@ -123,7 +136,7 @@ partial class Program {
                     directoryFiles.Add(new() {
                         Output = outputPath,
                         Input = childFilePath,
-                        OutputExtension = paths.OutputExtension,
+                        OutputExtension = ioParams.OutputExtension,
                     });
                 }
             }
@@ -131,7 +144,7 @@ partial class Program {
             foreach (string subDirectory in childDirectories) {
                 string subDirectoryName = Path.GetFileName(subDirectory);
                 string outputPath = Path.Combine([
-                    paths.Output,
+                    ioParams.Output,
                     ..subPaths,
                     subDirectoryName
                 ]);
@@ -141,10 +154,11 @@ partial class Program {
         }
         findDirectoryDocumentsRecursive([]);
         
-        await Parallel.ForEachAsync(directoryFiles, parallelOptions, async (fileIOPaths, _) => {
-            string? outputPath = await ShaderizeDocument(parameters, shaderConfig, fileIOPaths, shaderProcessor);
+        await Parallel.ForEachAsync(directoryFiles, parallelOptions, async (fileIOParams, _) => {
+            // Avoid multithreading on shaders for multithreading on files instead
+            string? outputPath = await ShaderizeDocument(parameters, shaderConfig, fileIOParams, sliceCount, false);
             Console.WriteLine(outputPath != null 
-                ? $"Shaderized {fileIOPaths.Input} to {outputPath}." 
+                ? $"Shaderized {fileIOParams.Input} to {outputPath}." 
                 : $"Export failed of shaderized document from {outputPath}."
             );
         });
@@ -159,8 +173,8 @@ partial class Program {
     /// <param name="paths">IOPaths object for the input and output paths</param>
     /// <param name="shaderProcessor">The shader processor to use [defaults to new ShaderProcessor()]</param>
     /// <returns>Task for when it finishes</returns>
-    static async Task<string?> ShaderizeDocument(ShaderizeDocumentParameters parameters, ShaderConfig shaderConfig, IOPaths paths, ShaderProcessor? shaderProcessor = null) {
-        string? markdown = File.ReadAllText(paths.Input);
+    static async Task<string?> ShaderizeDocument(ShaderizeDocumentParameters parameters, ShaderConfig shaderConfig, IOParameters ioParameters, int sliceCount = 1, bool multithreadingEnabled = true) {
+        string? markdown = File.ReadAllText(ioParameters.Input);
 
         var pipeline = new MarkdownPipelineBuilder()
             .UseAdvancedExtensions()
@@ -168,7 +182,22 @@ partial class Program {
 
         string? html = Markdown.ToHtml(markdown, pipeline);
 
-        var renderer = new HtmlShaderRenderer(shaderProcessor ?? new ShaderProcessor());
+        var renderer = new HtmlShaderRenderer(new ShaderProcessor(multithreadingEnabled));
+
+        
+
+        AnimatedFileExtension? fileExtension = FileExtension.GetAnimatedFileExtension(ioParameters.Output);
+        string? animatedFileExtension = FileExtension.GetFileExtensionString(ioParameters.OutputExtension);
+        // Invalid export file extension, abort (should normally never happen, since all file extensions should be covered in GetFileExtensionString)
+        if (animatedFileExtension == null) {
+            return null;
+        }
+        string outputPath = (fileExtension == ioParameters.OutputExtension || sliceCount > 1)
+            ? ioParameters.Output // output path has correct file extension as is
+            : (fileExtension == null
+                ? $"{ioParameters.Output}.{animatedFileExtension}" // No file extension, so add it
+                : Path.ChangeExtension(ioParameters.Output, animatedFileExtension) // Incorrect file extension, so replace it
+            ); 
 
         byte[][] documentFrames = await renderer.GetShaderizedHTMLAsync(
             html: html,
@@ -178,17 +207,69 @@ partial class Program {
             fps: parameters.FPS,
             duration: parameters.Duration,
             scale: parameters.Scale,
-            reverseLoopFromEnd: parameters.ReverseLoopFromEnd
+            reverseLoopFromEnd: parameters.ReverseLoopFromEnd,
+            backgroundColor: parameters.BackgroundColor
         );
+        
+        if (sliceCount < 2) {
+            Console.WriteLine($"Exporting shaderized document.");
 
-        return await AnimatedExporter.ExportAnimatedAsync(documentFrames, parameters.FPS, paths.Output, paths.OutputExtension);
+            await AnimatedExporter.ExportAnimatedAsync(
+                documentFrames, 
+                parameters.FPS, 
+                outputPath, 
+                ioParameters.OutputExtension
+            );
+        } else {
+            Directory.CreateDirectory(outputPath);
+            
+            Console.WriteLine($"Slicing animated frames to {sliceCount} slices before export.");
+            byte[][][] slicedFrames = ImageSlicer.SliceFramesVertically(documentFrames, sliceCount);
+            
+            int exportedCounter = 0;
+            var exportTasks = Enumerable.Range(0, slicedFrames.Length).Select(async i => {
+                string sliceOutputPath = Path.Combine(
+                    outputPath, 
+                    $"slice_{i + 1}.{animatedFileExtension}"
+                );
+                byte[][] slicedFrame = slicedFrames[i];
+                int counter = Interlocked.Increment(ref exportedCounter);
+
+                Console.WriteLine($"Exporting shaderized document slice: {counter}/{sliceCount}");
+
+                await AnimatedExporter.ExportAnimatedAsync(
+                    slicedFrame,    
+                    parameters.FPS,
+                    sliceOutputPath,
+                    ioParameters.OutputExtension
+                );
+            });
+
+            await Task.WhenAll(exportTasks);
+        }
+        return outputPath;
     }
 
 }
 
 
-public class IOPaths {
+public class IOParameters {
+    /// <summary>
+    /// Path to the input document
+    /// </summary>
     public required string Input { get; init; }
+    /// <summary>
+    /// Path to the output
+    /// </summary>
     public required string Output { get; init; }
+    /// <summary>
+    /// File extension of the output
+    /// </summary>
     public required AnimatedFileExtension OutputExtension { get; init; } 
+    /// <summary>
+    /// How many vertical slices per output.
+    /// Only slices if value > 1
+    /// [defaults to 1]
+    /// </summary>
+    public int OutputVerticalSliceCount = 1;
 }
