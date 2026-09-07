@@ -16,8 +16,9 @@ public class ShaderProcessor : IShaderProcessor {
         public int Height { get; set; }
         public byte[] Pixels { get; set; } = [];
     }
-
-    public ShaderProcessor() {
+    public bool MultithreadingEnabled { get; init; } = true;
+    public ShaderProcessor(bool multithreadingEnabled = true) {   
+        MultithreadingEnabled  = multithreadingEnabled;
     }
 
     const string PAGE_SHADER_RENDERER_LOADED_FLAG = "__shaderRendererLoaded";
