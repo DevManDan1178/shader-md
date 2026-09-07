@@ -2,7 +2,7 @@ using System.CommandLine;
 using ShaderMarkdown.Files;
 
 public class CommandLineOptions {
-    const int DEFAULT_WIDTH = 800;
+    const int DEFAULT_WIDTH = 1000;
     const int DEFAULT_HEIGHT = 0;
     const int DEFAULT_FPS = 5;
     const int DEFAULT_VERTICAL_SLICE_COUNT = 1;
