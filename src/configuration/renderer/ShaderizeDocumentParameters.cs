@@ -3,22 +3,14 @@ using ShaderMarkdown.Files;
 namespace ShaderMarkdown.Config;
 
 public class ShaderizeDocumentParameters {
-    public class IOPaths {
-        public string Input { get; init; } = "";
-        public string Output { get; init; } = "";
-    }
-
     public class RenderSettings {
-        public class DocumentSize
-        {
+        public class DocumentSize {
             public int Width { get; init; } = 800;
-            public int Height { get; init; } = 100;
+            public int Height { get; init; } = 0;
         }
 
         public DocumentSize DocSize { get; init; } = new();
     }
-
-    public IOPaths Paths { get; init; } = new();
 
     public RenderSettings DocRenderSettings { get; init; } = new();
 
