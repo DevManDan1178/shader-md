@@ -106,7 +106,6 @@ public class HtmlShaderRenderer {
             documentFrames = await _shaderProcessor.ApplyOverAnimatedAsync(page.Context, documentFrames, fps, finalizeShaderInfo.ToShaderInfo(shaderConfig.ShadersRootDirectory));
         }
 
-        Console.WriteLine("Exporting.");
         if (reverseLoopFromEnd && documentFrames.Length > 2) {
             // Duplicates every frame EXCEPT last one and first one for the loop
             byte[][] loopedDocumentFrames = new byte[(documentFrames.Length - 1) * 2][];
