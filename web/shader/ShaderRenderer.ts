@@ -6,7 +6,10 @@ import {
     ShaderRenderBatchArgs,
     parseShaderDefaults,
     identityVertexShader,
-    setShaderUniform
+    setShaderUniform,
+    timeUniform,
+    resolutionUniform,
+    textureUniform,
 } from ".";
 
 class ShaderRenderer {
@@ -47,9 +50,9 @@ class ShaderRenderer {
         this.texture = texture;
         this.defaultShaderProperties = defaultShaderProperties;
 
-        this.textureLocation = gl.getUniformLocation(program, "uTexture");
-        this.resolutionLocation = gl.getUniformLocation(program, "uResolution");
-        this.timeLocation = gl.getUniformLocation(program, "uTime");
+        this.textureLocation = gl.getUniformLocation(program, textureUniform);
+        this.resolutionLocation = gl.getUniformLocation(program, resolutionUniform);
+        this.timeLocation = gl.getUniformLocation(program, timeUniform);
         this.cacheUniforms();
     }
 
@@ -242,6 +245,9 @@ class ShaderRenderer {
         };
 
         for (const [property, value] of Object.entries(properties)) {
+            if (property == timeUniform || property == textureUniform || property == resolutionUniform) {
+                continue;
+            }
             try {
                 const uniform = this.shaderUniforms.get(property);
                 if (!uniform) {

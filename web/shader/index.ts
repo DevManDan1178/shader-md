@@ -36,6 +36,11 @@ export interface RawFrameResult {
     pixels: Uint8Array;
 }
 
+export const timeUniform = "uTime";
+export const textureUniform = "uTexture";
+export const resolutionUniform = "uResolution";
+
+const uvUniform = "vUv";
 export const identityVertexShader: string = `#version 300 es
 
 in vec2 aPosition;
@@ -44,7 +49,7 @@ in vec2 aUv;
 out vec2 vUv;
 
 void main() {
-    vUv = aUv;
+    ${uvUniform} = aUv;
     gl_Position = vec4(aPosition, 0.0, 1.0);
 }
 `;
