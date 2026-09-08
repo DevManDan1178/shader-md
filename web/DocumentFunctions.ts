@@ -641,7 +641,7 @@ function createHTMLPage(extraStyle : string, pageContent : string) : string {
                 }
 
                 em {
-                    color: #c9d1d9;
+                    color: #e2e8ee;
                 }
 
                 /* =========================
