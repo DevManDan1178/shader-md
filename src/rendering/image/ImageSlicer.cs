@@ -29,7 +29,7 @@ public static class ImageSlicer {
         }
 
         Parallel.For(0, frames.Length, frameIdx => {
-            byte[][] frameSlices = SliceVertically(frames[frameIdx], sliceCount);
+            byte[][] frameSlices = SliceImageVertically(frames[frameIdx], sliceCount);
 
             for (int sliceIdx = 0; sliceIdx < frameSlices.Length; ++sliceIdx) {
                 slicedFrames[sliceIdx][frameIdx] = frameSlices[sliceIdx];
@@ -51,7 +51,7 @@ public static class ImageSlicer {
     /// SliceVertically(...)[i] = (i + 1)'th vertical slice from the left
     /// </returns>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
-    public static byte[][] SliceVertically(byte[] imageBytes, int sliceCount) {
+    public static byte[][] SliceImageVertically(byte[] imageBytes, int sliceCount) {
         if (sliceCount <= 1) {
             throw new ArgumentOutOfRangeException(nameof(sliceCount), "Invalid image slice count.");
         }
