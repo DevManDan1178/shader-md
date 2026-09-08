@@ -56,7 +56,7 @@ Because every element type has both a `content` shader and a `background` shader
 
 - Set `shader_path` under any element's `content` or `background` entry to point it at a `.frag` file in the `shaders` folder.
 - Adjust the `shader_parameters` block under a shader entry to change how that shader behaves (things like color, intensity, speed, and so on, depending on what the shader itself exposes as parameters).
-- Leaving `shader_path` will simply avoid applying shaders
+- Leaving `shader_path` empty will treat the element normally without shaders.
 - Leaving `shader_parameters` empty will cause the shaders to use its default parameters 
 
 This means most customization work happens in `shaderConfig.yaml` rather than in code: you are choosing which shader plays which role, not writing new rendering logic.
@@ -73,7 +73,7 @@ Default shaders from the shader configuration file (`shaderConfig.yaml`) can be 
     - For example, `shader-bg="myCustomShader.frag"`
     - To avoid applying a background shader to the element, the shader property can be set to `shader-bg=""` (empty string)
 - The shader parameters of an element can be set with the `shader-params` and its background with the `shader-bg-params` properties, then giving the shader parameters as a json string.
-    - For example, `shader-params='{"shaderProperty1": value, "shaderProperty2": value}'`
+    - For example, `shader-params='{"shaderProperty1": 1, "shaderProperty2": 2}'`
 
 ### Shader properties
 
@@ -153,7 +153,7 @@ Ex:
 
     uniform vec3 color;
     uniform float effectAlpha;
-/*
+*/
 ```
 ### Usage
 
