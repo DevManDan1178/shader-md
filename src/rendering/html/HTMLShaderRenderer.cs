@@ -79,7 +79,7 @@ public class HtmlShaderRenderer {
         Console.WriteLine($"Shaderizing document. Size: {documentSize.Width}x{documentSize.Height}.");
 
         Console.WriteLine("Processing shaders.");
-        var processed = await _htmlShaderProcessor.ProcessShadersAsync(page, shaderConfig.ShadersRootDirectory, fps, duration);
+        var processed = await _htmlShaderProcessor.ProcessShadersAsync(page, fps, duration, shaderConfig.ShadersRootDirectory, backgroundColor);
         
         byte[][]? documentBackgroundFrames = null;
         SerializableShaderInfo backgroundShaderInfo = shaderConfig.DocumentShaders.Background;

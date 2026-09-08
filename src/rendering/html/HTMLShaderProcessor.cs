@@ -52,7 +52,7 @@ public class HTMLShaderProcessor {
         IReadOnlyList<ILocator> elements,
         IReadOnlyList<byte[]>[]? backgroundFrames,
         IReadOnlyList<ILocator>? backgroundElements
-    )> ProcessShadersAsync(IPage page, string shadersRootDirectory, int fps, float duration) {
+    )> ProcessShadersAsync(IPage page, int fps, float duration, string shadersRootDirectory, string backgroundColor) {
         int frameCount = _shaderProcessor.GetShaderFrameCount(fps, duration);
         
         var processedElements = new List<ILocator>();
@@ -102,7 +102,8 @@ public class HTMLShaderProcessor {
                             shadersRootDirectory,
                             shaderBg, 
                             ShaderParameters.ParseShaderParameters(shader_params)
-                        )
+                        ),
+                        backgroundColor
                     );
 
                     for (int frameIdx = 0; frameIdx < frameCount; frameIdx++) {
