@@ -14,7 +14,14 @@ export interface ShaderFrameParams {
     shaderProperties: ShaderProperties;
 }
 
-export interface ShaderRenderArgs {
+export interface ImageSliceInfo {
+    verticalSliceCount : number;
+    horizontalSliceCount : number;
+    verticalSliceIndex : number;
+    horizontalSliceIndex : number;
+}
+
+export type ShaderRenderArgs = {
     shaderPath: string;
     imageBase64: string;
     fragmentSource: string;
@@ -22,6 +29,10 @@ export interface ShaderRenderArgs {
         time: number;
         shaderProperties: ShaderProperties;
     };
+}
+
+export type ShaderChunkRenderArgs = ShaderRenderArgs & {
+    imageSliceInfo : ImageSliceInfo;
 }
 
 export interface ShaderRenderBatchArgs {
@@ -53,6 +64,36 @@ void main() {
     gl_Position = vec4(aPosition, 0.0, 1.0);
 }
 `;
+
+export function getVertexShaderSource(imageSliceInfo : ImageSliceInfo | null) {
+    if (!imageSliceInfo) {
+        return identityVertexShader;
+    }
+    return `#version 300 es
+
+    in vec2 aPosition;
+    in vec2 aUv;
+
+    out vec2 vUv;
+
+    void main() {
+        ${uvUniform} = vec2(
+            (aUv.x + float(${imageSliceInfo.verticalSliceIndex})) / float(${imageSliceInfo.verticalSliceCount}),
+            (aUv.y + float(${imageSliceInfo.horizontalSliceIndex})) / float(${imageSliceInfo.horizontalSliceCount})
+        );
+        gl_Position = vec4(aPosition, 0.0, 1.0);
+    }
+`;
+}
+
+export function areImageSliceInfoEqual(info1 : ImageSliceInfo | null, info2 : ImageSliceInfo | null) {
+    return (info1 == null && info2 == null) || (info1 == null || info2 == null) || (
+        info1.horizontalSliceCount == info2.horizontalSliceCount 
+        && info1.verticalSliceCount == info2.verticalSliceCount
+        && info1.verticalSliceIndex == info2.verticalSliceIndex
+        && info1.horizontalSliceIndex == info2.horizontalSliceIndex
+    );
+}
 
 export function parseShaderDefaults(source: string): ShaderProperties {
     const defaults: ShaderProperties = {};
