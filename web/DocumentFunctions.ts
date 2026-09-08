@@ -747,15 +747,11 @@ function createHTMLPage(extraStyle : string, pageContent : string) : string {
                 ========================= */
 
                 table {
-                    width: 100%;
                     margin-top: 0;
                     margin-bottom: 16px;
 
                     border-spacing: 0;
                     border-collapse: collapse;
-
-                    display: block;
-                    overflow-x: auto;
 
                     color: #c9d1d9;
                 }
