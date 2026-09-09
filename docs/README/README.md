@@ -1,4 +1,7 @@
-# Shader-md
+<h1>Shader<span ignoreParentShaders="yes sir">-</span><span ignoreParentShaders shader="colorBlink.frag" shader-params='{
+    "effectAlpha": 0.85,
+    "timescale": 0.5
+}'>md</span></h1>
 
 Turn a Markdown file into a visually styled document by applying GPU shader effects to it. Headings, paragraphs, lists, code blocks, tables, images, and more can each get their own animated or stylized look.
 
@@ -50,7 +53,7 @@ The shader configuration is organized into two main areas:
 You are free to leave these defaults as they are and simply run Shader-md against your Markdown file, or edit the YAML to point any element at a different shader.
 
 
-### Applying and changing shaders on elements
+### Applying default shaders on elements
 
 Because every element type has both a `content` shader and a `background` shader, you can mix and match freely:
 
@@ -74,6 +77,9 @@ Default shaders from the shader configuration file (`shaderConfig.yaml`) can be 
     - To avoid applying a background shader to the element, the shader property can be set to `shader-bg=""` (empty string)
 - The shader parameters of an element can be set with the `shader-params` and its background with the `shader-bg-params` properties, then giving the shader parameters as a json string.
     - For example, `shader-params='{"shaderProperty1": 1, "shaderProperty2": 2}'`
+- An element can ignore its ancestor's shaders with the `ignoreParentShaders` property, which defaults to `true` unless set to `false` (neither case nor space sensitive)
+    - For example, `ignoreParentShaders` alone and `ignoreParentShaders="yea probably"` ignore parent shaders, but `ignoreParentShaders="False"` will not do so.
+
 
 ### Shader properties
 
@@ -82,7 +88,7 @@ By default, every shader has a property `time` and `timescale`:
 - The property `time` represents the starting time of the shader.
 - The property `timescale` represents a scaling factor given to the time interpolation.
 
-Shader time (given to the shader on each frame) is calculated using `time + timescale * current frame / FPS`.
+Shader time (given to the shader on each frame) is calculated using `uTime = time + timescale * current frame / FPS`.
 
 #### Setting shader properties
 Shader properties can be set in the shader configuration file and as HTML properties with `shader-params`.
@@ -246,25 +252,23 @@ It's a technical and creative tool rather than a simple document converter. Gett
 Shader-md is a hybrid **.NET 8 (C#) + TypeScript** project:
 
 ```
-Markdown file
-      │
-      ▼
- Markdig (Markdown parsing)
-      │
-      ▼
- Browser rendering via Microsoft.Playwright
-      │
-      ▼
- Per-element rasterization
-      │
-      ▼
- WebGL / GLSL shader pass(es), TypeScript renderer
-      │
-      ▼
- SixLabors.ImageSharp (compositing / frame processing)
-      │
-      ▼
- Final output (image / animation)
+Markdown
+   ↓
+Markdig
+   ↓
+HTML + shader metadata
+   ↓
+Playwright / Chromium
+   ↓
+DOM layout
+   ↓
+Per-element rasterization
+   ↓
+WebGL / GLSL
+   ↓
+ImageSharp compositing
+   ↓
+WEBP / image output
 ```
 
 - **C# application**
@@ -328,4 +332,4 @@ The `.frag` shader files and `shaderConfig.yaml` are likewise marked as `Content
 - `StaticShaderRenderer.ts` exists specifically to reduce cost in cases where the source image does not change between frames, avoiding redundant GPU uploads during animated output.
 
 ---
-*Note: some developer-facing details (exact CLI flags, precise WebGL call sequence) may evolve — check `src/` and `web/shader/` directly for the current implementation.*
+*Note: some developer-facing details may evolve — check `src/` and `web/shader/` directly for the current implementation.* 
