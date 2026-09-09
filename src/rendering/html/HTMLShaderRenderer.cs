@@ -74,6 +74,7 @@ public class HtmlShaderRenderer {
         await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
         await page.EvaluateAsync("() => document.fonts.ready");
+        await page.EvaluateAsync("() => DocumentFunctions.waitForImagesSettled()");
         
         DocumentSize documentSize = await HTMLDocument.GetDocumentSizeAsync(page);
         Console.WriteLine($"Shaderizing document. Size: {documentSize.Width}x{documentSize.Height}.");
@@ -93,7 +94,7 @@ public class HtmlShaderRenderer {
         
         Console.WriteLine($"Now compositing.");
         string currentDocumentHtml = await page.ContentAsync();
-        byte[][] documentFrames = await GetDocumentFramesAsync(
+        byte[][] documentFrames = await CompositeDocumentFramesAsync(
             page, 
             processed, 
             documentBackgroundFrames,
@@ -164,7 +165,7 @@ public class HtmlShaderRenderer {
     }
 
 
-    private async Task<byte[][]> GetDocumentFramesAsync(
+    private async Task<byte[][]> CompositeDocumentFramesAsync(
         IPage page,
         (
             IReadOnlyList<byte[]>[] frames, 
@@ -183,7 +184,8 @@ public class HtmlShaderRenderer {
         byte[][] documentFrames = new byte[processedFrames.Length][];
 
         await page.SetViewportSizeAsync(documentSize.Width, documentSize.Height);
-
+        await page.EvaluateAsync("() => DocumentFunctions.resyncShaderLayerPositions()");
+        
         for (int frameIdx = 0; frameIdx < processedFrames.Length; ++frameIdx) {
             Console.WriteLine($"Compositing frame: {frameIdx + 1}/{processedFrames.Length}");
 
@@ -209,6 +211,7 @@ public class HtmlShaderRenderer {
 
             await page.EvaluateAsync("() => window.scrollTo(0, 0)");
             await HTMLDocument.WaitForNextPaintAsync(page);
+
             documentFrames[frameIdx] = await page.ScreenshotAsync();
         }
 
