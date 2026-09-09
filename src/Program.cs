@@ -15,7 +15,7 @@ partial class Program {
         if (!options.Input.Exists) {
             throw new FileNotFoundException($"File not found: \"{options.Input}\".");
         }
-        Console.WriteLine(options.Output);
+
         if (Path.Exists(options.Output)) {
             if (!options.OverwriteExistingFile) {
                 throw new IOException($"File already exists at the output path and \"--oef\" (overwrite existing file) is not set.");
@@ -29,7 +29,7 @@ partial class Program {
         if (!options.ShaderConfig.Exists) {
             throw new FileNotFoundException($"Shader configuration document not found: \"{options.ShaderConfig}\".");
         }
-        Console.WriteLine($"Input: {options.Input};Output: {options.Output};");
+
         bool shaderizingDirectory = options.Input.Attributes.HasFlag(FileAttributes.Directory);
         
         if (!shaderizingDirectory) {   
