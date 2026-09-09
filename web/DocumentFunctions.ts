@@ -14,6 +14,10 @@ type ShaderInfo = {
     ShaderParameters : Record<string, any>;
 };
 
+
+// ignoreParentShaders="..." should always ignore parent shaders unless the entered string is false (for convenience)
+const parseIgnoreParentShaders = (value : string | null) => value != null && value.trim().toLowerCase() !== "false";
+
 const SHADER_LAYER_ZINDEX = -1;
 const SHADER_ID_PREFIX = "shader-";
 const SHADER_OUTPUT_CLASSNAME = "shader-output";
@@ -353,7 +357,7 @@ export function createShaderLayer(
     image.dataset.shaderSource = element.id;
 
     // Mark this layer if its source is an ignoreParentShaders descendant.
-    if (element.closest(`[${IGNORE_PARENT_SHADERS_KEY}="true"]`)) {
+    if (findFirstIgnoreParentShadersAncestor(element)) {
         image.dataset.shaderDescendant = "true";
     }
 
@@ -415,21 +419,28 @@ export function createShaderLayer(
 
 
 /**
- * @brief Returns ids of descendants marked ignoreParentShaders, to exclude from a shader screenshot.
+ * @brief Returns ids of descendants opting out of parent shaders, to exclude from a shader screenshot.
+ * An element opts out unless its ignoreParentShaders value is exactly "false" (case-insensitive).
  * @param element Element whose descendants are checked.
- * @return Ids of ignored descendants.
+ * @return Ids of opted-out descendants.
  */
 export function getDescendantsIgnoringParentShaders(element: HTMLElement): string[] {
     const result: string[] = [];
 
-    const descendants = element.querySelectorAll(
-        `[${IGNORE_PARENT_SHADERS_KEY}="true"]`
-    );
+    const descendants = element.querySelectorAll(`[${IGNORE_PARENT_SHADERS_KEY}]`);
 
     for (const descendant of descendants) {
-        if (descendant instanceof HTMLElement && descendant.id) {
-            result.push(descendant.id);
+        if (!(descendant instanceof HTMLElement) || !descendant.id) {
+            continue;
         }
+
+        const ignoreParentShadersProperty = descendant.getAttribute(IGNORE_PARENT_SHADERS_KEY) ?? "";
+
+        if (!parseIgnoreParentShaders(ignoreParentShadersProperty)) {
+            continue;
+        }
+
+        result.push(descendant.id);
     }
 
     return result;
@@ -983,4 +994,28 @@ function createHTMLPage(extraStyle : string, pageContent : string) : string {
         </body>
     </html>
     `
+}
+
+
+/**
+ * @brief Finds the nearest ancestor (or self) opted into ignoreParentShaders,
+ * skipping past any ancestor whose value is exactly "false" (case-insensitive)
+ * to keep checking further up the tree.
+ * @param element Element to start searching from.
+ * @return The nearest opted-in ancestor/self, or null if none found.
+ */
+function findFirstIgnoreParentShadersAncestor(element: Element): Element | null {
+    let current: Element | null = element;
+
+    while (current) {
+        if (current.hasAttribute(IGNORE_PARENT_SHADERS_KEY)) {
+            if (parseIgnoreParentShaders(current.getAttribute(IGNORE_PARENT_SHADERS_KEY))) {
+                return current;
+            }
+        }
+
+        current = current.parentElement;
+    }
+
+    return null;
 }
