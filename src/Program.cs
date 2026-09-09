@@ -36,9 +36,6 @@ partial class Program {
             if (!FileExtension.IsSupportedDocumentExtension(options.Input.FullName)) {
                 throw new FormatException($"Document file extension is unsupported: \"{options.Input.FullName}\".");
             }
-            if (options.VerticalSliceCount <= 1 && FileExtension.GetAnimatedFileExtension(options.Output) == null) {
-                throw new FormatException($"Output file extension is unsupported: \"{Path.GetExtension(options.Output)}\".");
-            }
         }
         
         ShaderizeDocumentParameters parameters = new ShaderizeDocumentParameters() {
@@ -74,7 +71,7 @@ partial class Program {
         
         Stopwatch stopwatch = Stopwatch.StartNew();
 
-        Console.WriteLine($"Preparing to shaderize \"{options.Input.FullName}\" to target \"{options.Output}\" with shader configurations at \"{options.ShaderConfig.FullName}\".");
+        Console.WriteLine($"Preparing to shaderize \"{options.Input.FullName}\" to target \"{options.Output}\" with file extension {options.Output} and with shader configurations at \"{options.ShaderConfig.FullName}\".");
         
         if (shaderizingDirectory) {
             await ShaderizeDocumentDirectory(
@@ -193,11 +190,9 @@ partial class Program {
             return null;
         }
         string outputPath = (fileExtension == ioParameters.OutputExtension || sliceCount > 1)
-            ? ioParameters.Output // output path has correct file extension as is
-            : (fileExtension == null
-                ? $"{ioParameters.Output}.{animatedFileExtension}" // No file extension, so add it
-                : Path.ChangeExtension(ioParameters.Output, animatedFileExtension) // Incorrect file extension, so replace it
-            ); 
+            ? ioParameters.Output
+            : $"{ioParameters.Output}.{animatedFileExtension}"; 
+             
 
         byte[][] documentFrames = await renderer.GetShaderizedHTMLAsync(
             html: html,
