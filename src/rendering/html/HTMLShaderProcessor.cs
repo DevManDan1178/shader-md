@@ -6,20 +6,26 @@ namespace ShaderMarkdown.Rendering;
 /// Contains functions for processing shaders with HTML elements.
 /// </summary>
 public class HTMLShaderProcessor {
-    private readonly IShaderProcessor _shaderProcessor;
-
-    public HTMLShaderProcessor(IShaderProcessor shaderProcessor) {
-        _shaderProcessor = shaderProcessor;
-
-    }
-
     const string SHADER_KEY = "shader";
     const string SHADER_PARAMETERS_KEY = $"shader-params";
     const string SHADER_BG_KEY = "shader-bg";
     const string SHADER_BG_PARAMETERS_KEY  = $"shader-bg-params";
     const string IGNORE_PARENT_SHADERS_KEY = "ignoreParentShaders";
     const string SHADER_OUTPUT_CLASSNAME = "shader-output";
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    static bool parseIgnoreParentShaders(string? value) {
+        return value != null && !value.Trim().ToLower().Equals("false");
+    }
 
+    private readonly IShaderProcessor _shaderProcessor;
+
+    public HTMLShaderProcessor(IShaderProcessor shaderProcessor) {
+        _shaderProcessor = shaderProcessor;
+    }
     private sealed class ElementInfo {
         public int Idx { get; set; }
         public string Id { get; set; } = "";
@@ -52,7 +58,7 @@ public class HTMLShaderProcessor {
         IReadOnlyList<ILocator> elements,
         IReadOnlyList<byte[]>[]? backgroundFrames,
         IReadOnlyList<ILocator>? backgroundElements
-    )> ProcessShadersAsync(IPage page, string shadersRootDirectory, int fps, float duration) {
+    )> ProcessShadersAsync(IPage page, int fps, float duration, string shadersRootDirectory, string backgroundColor) {
         int frameCount = _shaderProcessor.GetShaderFrameCount(fps, duration);
         
         var processedElements = new List<ILocator>();
@@ -80,8 +86,10 @@ public class HTMLShaderProcessor {
             string id = idInfo.Id;
             
             var element = page.Locator($"#{id}");
-            var shader = await element.GetAttributeAsync(SHADER_KEY);
-            var shaderBg = await element.GetAttributeAsync(SHADER_BG_KEY);
+            var shader = await element.GetAttributeAsync(SHADER_KEY) ?? "";
+            var shaderBg = await element.GetAttributeAsync(SHADER_BG_KEY) ?? "";
+            var ignoreParentShaders = parseIgnoreParentShaders(await element.GetAttributeAsync(IGNORE_PARENT_SHADERS_KEY));
+            
             Console.WriteLine($"Shaderizing element: {idInfo.Idx + 1}/{shaderIds.Length}.");
 
             if (!string.IsNullOrWhiteSpace(shaderBg)) {
@@ -102,7 +110,8 @@ public class HTMLShaderProcessor {
                             shadersRootDirectory,
                             shaderBg, 
                             ShaderParameters.ParseShaderParameters(shader_params)
-                        )
+                        ),
+                        backgroundColor
                     );
 
                     for (int frameIdx = 0; frameIdx < frameCount; frameIdx++) {
@@ -116,8 +125,8 @@ public class HTMLShaderProcessor {
 
             if (!string.IsNullOrWhiteSpace(shader)) {
                 var screenshot = await ScreenshotForShaderAsync(element);
-                var box = await element.BoundingBoxAsync();
 
+                var box = await element.BoundingBoxAsync();
                 if (box == null) {
                     throw new InvalidOperationException( $"Could not determine dimensions for shader element.");
                 }
@@ -150,7 +159,7 @@ public class HTMLShaderProcessor {
 
                 await element.EvaluateAsync(
                     """
-                    (element) => DocumentFunctions.hideOriginalElement(element)
+                    (element) => DocumentFunctions.hideShaderedElement(element)
                     """
                 );
             }
@@ -186,47 +195,29 @@ public class HTMLShaderProcessor {
     }
 
     private static async Task<byte[]> ScreenshotForShaderAsync(ILocator element) {
-        // TODO, ignore siblings too
         var ignoredDescendants = await element.EvaluateAsync<string[]>(
             """
             (element) => DocumentFunctions.getDescendantsIgnoringParentShaders(element)
             """
         );
+
         await element.EvaluateAsync(
             """
             (element) => DocumentFunctions.setSiblingsVisible(element, false)
             """
         );
-        if (ignoredDescendants.Length == 0) {
-            try
-            {
-                return await element.ScreenshotAsync(new() {
-                    Type = ScreenshotType.Png,
-                    OmitBackground = true,
-                });
-            } finally {
-                await element.EvaluateAsync(
-                    """
-                    (element) => DocumentFunctions.setSiblingsVisible(element, true)
-                    """
-                );
-            }
-            
-        }
 
-        /*
-            Hide overlay layers sourced from ignored descendants, and hide the descendants themselves
-            (covers ignoreParentShaders-only elements with no shader of their own, which don't get an overlay layer)
-        */
-        var hiddenCount = await element.Page.EvaluateAsync<int>(
-            """
-            (ids) => DocumentFunctions.setShaderLayersVisible(ids, false)
-            """,
-            ignoredDescendants
-        );
+        int hiddenCount = 0;
 
         try {
-            // OmitBackground makes the hidden descendant areas (and their shader layers) transparent, leaving holes where ignored descendants exist.
+            if (ignoredDescendants.Length > 0) {
+                hiddenCount = await element.Page.EvaluateAsync<int>(
+                    """
+                    (ids) => DocumentFunctions.setShaderLayersVisible(ids, false)
+                    """,
+                    ignoredDescendants
+                );
+            }
             return await element.ScreenshotAsync(new() {
                 Type = ScreenshotType.Png,
                 OmitBackground = true,
@@ -240,11 +231,12 @@ public class HTMLShaderProcessor {
                     ignoredDescendants
                 );
             }
+
             await element.EvaluateAsync(
-            """
-            (element) => DocumentFunctions.setSiblingsVisible(element, true)
-            """
-        );
+                """
+                (element) => DocumentFunctions.setSiblingsVisible(element, true)
+                """
+            );
         }
     }
 }

@@ -3,27 +3,19 @@ using ShaderMarkdown.Files;
 namespace ShaderMarkdown.Config;
 
 public class ShaderizeDocumentParameters {
-    public class IOPaths {
-        public string Input { get; init; } = "";
-        public string Output { get; init; } = "";
-    }
-
     public class RenderSettings {
-        public class DocumentSize
-        {
-            public int Width { get; init; } = 800;
-            public int Height { get; init; } = 100;
+        public class DocumentSize {
+            public required int Width { get; init; }
+            public required int Height { get; init; }
         }
 
-        public DocumentSize DocSize { get; init; } = new();
+        public required DocumentSize DocSize { get; init; }
     }
 
-    public IOPaths Paths { get; init; } = new();
-
-    public RenderSettings DocRenderSettings { get; init; } = new();
-
-    public float Duration { get; init; } = 1.0f;
-    public float Scale { get; init; } = 1.0f;
-    public int FPS { get; init; } = 6;
-    public bool ReverseLoopFromEnd { get; init; } = false;
+    public required RenderSettings DocRenderSettings { get; init; }
+    public required string BackgroundColor { get; init; }
+    public required float Duration { get; init; } 
+    public required float Scale { get; init; } 
+    public required int FPS { get; init; } 
+    public required bool ReverseLoopFromEnd { get; init; }
 }

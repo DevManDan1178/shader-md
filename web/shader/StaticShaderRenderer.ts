@@ -5,7 +5,10 @@ import {
     parseShaderDefaults,
     identityVertexShader,
     setShaderUniform,
-    ShaderRenderBatchArgs
+    ShaderRenderBatchArgs,
+    timeUniform,
+    textureUniform,
+    resolutionUniform
 } from ".";
 
 export type StaticShaderRenderBatchArgs = ShaderRenderBatchArgs & {
@@ -253,6 +256,9 @@ class StaticShaderRenderer {
         };
 
         for (const [property, value] of Object.entries(properties)) {
+             if (property == timeUniform || property == textureUniform || property == resolutionUniform) {
+                continue;
+            }
             if (propertyEquals(this.lastAppliedProperties[property], value)) continue;
 
             try {

@@ -5,5 +5,5 @@ obj/
 markdown/
 output/
 sixlabors.lic
-shaderConfig.yaml
-shaders/
+/shaderConfig.yaml
+/shaders/

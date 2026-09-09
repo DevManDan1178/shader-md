@@ -11,6 +11,9 @@ public interface IShaderProcessor {
     const int MAX_SHADER_TASKS_COUNT = 5;
     const int SHADER_THREADS_COUNT = 4;
     const int MINIMUM_MULTITHREADING_FRAME_COUNT = 10;
+
+    bool MultithreadingEnabled => true;
+
     float GetShaderTime(float initialTime, float timeScale, int frame, int framesPerSecond) {
         return initialTime + timeScale * ((float) frame / framesPerSecond);
     }
@@ -46,8 +49,9 @@ public interface IShaderProcessor {
         float timeScale = shaderInfo.ShaderParameters.TimeScale;
         float shaderInitialTime = shaderInfo.ShaderParameters.Time;  
         
-        int workerCount = frames.Length < MINIMUM_MULTITHREADING_FRAME_COUNT ? 1 : Math.Min(SHADER_THREADS_COUNT, frames.Length / MIN_FRAMES_PER_WORKER);
-        
+        int workerCount = MultithreadingEnabled
+            ? frames.Length < MINIMUM_MULTITHREADING_FRAME_COUNT ? 1 : Math.Min(SHADER_THREADS_COUNT, frames.Length / MIN_FRAMES_PER_WORKER)
+            : 1;
         int processedFramesCounter = 0;
         await Task.WhenAll(
             Enumerable.Range(0, workerCount)
@@ -129,30 +133,41 @@ public interface IShaderProcessor {
         }
 
         
-        int workerCount = Math.Max(1, Math.Min(MAX_SHADER_TASKS_COUNT, frames.Length / MIN_FRAMES_PER_WORKER));
+        int workerCount = MultithreadingEnabled 
+            ? Math.Max(1, Math.Min(MAX_SHADER_TASKS_COUNT, frames.Length / MIN_FRAMES_PER_WORKER))
+            : 1;
         
         float[] shaderTimes = Enumerable.Range(0, frames.Length).Select(
             frame => GetShaderTime(shaderInitialTime, timeScale, frame, framesPerSecond)
         ).ToArray();
         
+        long imageSizeBytes = (long)imageWidth * imageHeight * 4;
+        bool isExcessiveSize = CheckExcessiveImageSize(imageSizeBytes, imageWidth, imageHeight);
+
         if (workerCount <= 1)  {
             IPage page = await browserContext.NewPageAsync();
-            await LoadPageStaticShaderRenderer(page);
-            
-            frames = await ApplyStaticBatchAsync(page, image, imageWidth, imageHeight, shaderInfo, shaderTimes);
+
+            if (isExcessiveSize) {
+                await LoadPageShaderRenderer(page);
+
+                for (int frame = 0; frame < frames.Length; frame++) {
+                    frames[frame] = await ApplyChunkedAsync(page, image, shaderInfo, shaderTimes[frame]);
+                }
+            } else {
+                await LoadPageStaticShaderRenderer(page);
+
+                frames = await ApplyStaticBatchAsync(page, image, imageWidth, imageHeight, shaderInfo, shaderTimes);
+            }
 
             await page.CloseAsync();
             return frames;
         }
         
         // No race conditions since every thread writes to different frames independently
-        
         await Task.WhenAll(
             Enumerable.Range(0, workerCount)
                 .Select(async (workerIdx) => {
                     IPage page = await browserContext.NewPageAsync();
-                    
-                    await LoadPageStaticShaderRenderer(page);
 
                     var frameIndices = new List<int>();
                     for (int frame = workerIdx; frame < frames.Length; frame += workerCount) {
@@ -163,10 +178,20 @@ public interface IShaderProcessor {
                         frame => shaderTimes[frame]
                     ).ToArray();
 
-                    byte[][] workerResults = await ApplyStaticBatchAsync(page, image, imageWidth, imageHeight, shaderInfo, workerShaderTimes);
+                    if (isExcessiveSize) {
+                        await LoadPageShaderRenderer(page);
 
-                    for (int i = 0; i < frameIndices.Count; i++) {
-                        frames[frameIndices[i]] = workerResults[i];
+                        for (int i = 0; i < frameIndices.Count; i++) {
+                            frames[frameIndices[i]] = await ApplyChunkedAsync(page, image, shaderInfo, workerShaderTimes[i]);
+                        }
+                    } else {
+                        await LoadPageStaticShaderRenderer(page);
+
+                        byte[][] workerResults = await ApplyStaticBatchAsync(page, image, imageWidth, imageHeight, shaderInfo, workerShaderTimes);
+
+                        for (int i = 0; i < frameIndices.Count; i++) {
+                            frames[frameIndices[i]] = workerResults[i];
+                        }
                     }
 
                     await page.CloseAsync();
@@ -211,7 +236,8 @@ public interface IShaderProcessor {
             shaderInfo
         );
     }
-
+    
+    public bool CheckExcessiveImageSize(long imageSizeBytes, int imageWidth, int imageHeight);
     Task LoadPageShaderRenderer(IPage page);
     Task LoadPageStaticShaderRenderer(IPage page);
 
@@ -234,6 +260,16 @@ public interface IShaderProcessor {
     /// <param name="shaderInfo">The shader information</param>
     /// <param name="shaderTimes">One time value per output frame</param>
     Task<byte[][]> ApplyStaticBatchAsync(IPage page, byte[] image, int imageWidth, int imageHeight, ShaderInfo shaderInfo, float[] shaderTimes);
-
+    /// <summary>
+    /// Renders a shader over a large image by physically cropping it into a grid of
+    /// chunks and processing them individually.
+    /// Slice counts are chosen automatically to keep each chunk under MAX_CHUNK_SIZE_BYTES.
+    /// </summary>
+    /// <param name="page">HTML page to run the shader scripts</param>
+    /// <param name="image">The full image</param>
+    /// <param name="shaderInfo"></param>
+    /// <param name="shaderTime">The shader information</param>
+    /// <returns>The shaderized image</returns>
+    Task<byte[]> ApplyChunkedAsync(IPage page, byte[] image, ShaderInfo shaderInfo, float shaderTime);
 }
 

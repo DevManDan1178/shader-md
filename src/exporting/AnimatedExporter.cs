@@ -1,4 +1,7 @@
 using ShaderMarkdown.Files;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace ShaderMarkdown.Exporting;
 
@@ -10,8 +13,8 @@ public static class AnimatedExporter {
     /// <param name="frames">frames to export</param>
     /// <param name="fps"></param>FPS of the animation
     /// <param name="outputPath">Output path of the exported animation</param>
-    /// <returns>(bool: success status, string: possible error message)</returns>
-    public static async Task<(bool, string?)> ExportAnimatedAsync(IReadOnlyList<byte[]> frames, int fps, string outputPath) {
+    /// <returns>Success status</returns>
+    public static async Task ExportAnimatedAsync(IReadOnlyList<byte[]> frames, int fps, string outputPath, AnimatedFileExtension outputExtension) {
         if (frames.Count == 0) {
             throw new ArgumentException("No frames were provided.", nameof(frames));
         }
@@ -20,24 +23,18 @@ public static class AnimatedExporter {
             throw new ArgumentOutOfRangeException(nameof(fps), "FPS must be greater than zero.");
         }
         
-        AnimatedFileExtension? fileExtension = FileExtension.GetAnimatedFileExtension(outputPath);
-        if (fileExtension == null) {
-            return (false, $"Unsupported file extension: \"{outputPath}\".");
-        }
-        switch (fileExtension) {
+        switch (outputExtension) {
             case AnimatedFileExtension.GIF:
                 await GifBuilder.SaveAsync(frames, fps, outputPath);
-                return (true, "");
+                break;
             case AnimatedFileExtension.WEBP:
                 await WebPBuilder.SaveAsync(frames, fps, outputPath);
-                return (true, "");
+                break;
             case AnimatedFileExtension.APNG:
                 await APNGBuilder.SaveAsync(frames, fps, outputPath);
-                return (true, "");
+                break;
             default:
                 break;
         }
-
-        return (true, "");
     }
 }

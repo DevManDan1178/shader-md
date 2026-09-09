@@ -1,24 +1,86 @@
-
 import { 
     ShaderProperties, 
     RawFrameResult, 
     ShaderRenderArgs,
     ShaderRenderBatchArgs,
     parseShaderDefaults,
-    identityVertexShader,
-    setShaderUniform
+    setShaderUniform,
+    timeUniform,
+    resolutionUniform,
+    textureUniform,
+    ImageSliceInfo,
+    getVertexShaderSource,
+    areImageSliceInfoEqual,
+    ShaderChunkRenderArgs,
 } from ".";
 
+function compileVertexShader(gl: WebGL2RenderingContext, source: string): WebGLShader {
+    if (!source) {
+        throw new Error("Vertex shader source is undefined.");
+    }
+
+    const shader = gl.createShader(gl.VERTEX_SHADER);
+    if (!shader) {
+        throw new Error("Failed to create Vertex shader.");
+    }
+
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        const log = gl.getShaderInfoLog(shader);
+        gl.deleteShader(shader);
+        throw new Error(`Vertex shader compilation failed:\n${log}\n\nSource:\n${source}`);
+    }
+
+    return shader;
+}
+
+function compileFragmentShader(gl: WebGL2RenderingContext, source: string): WebGLShader {
+    if (!source) {
+        throw new Error("Fragment shader source is undefined.");
+    }
+
+    const shader = gl.createShader(gl.FRAGMENT_SHADER);
+    if (!shader) {
+        throw new Error("Failed to create Fragment shader.");
+    }
+
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        const log = gl.getShaderInfoLog(shader);
+        gl.deleteShader(shader);
+        throw new Error(`Fragment shader compilation failed:\n${log}\n\nSource:\n${source}`);
+    }
+
+    return shader;
+}
+
+/**
+ * A shader renderer specialized for a single, fixed shader program.
+ * The fragment shader is compiled once at creation and never changes.
+ * The vertex shader also starts fixed (identityVertexShader) but can be
+ * swapped later via setVertexShader() without recreating the program,
+ * texture, buffers, or GL context.
+ */
 class ShaderRenderer {
     private canvas: OffscreenCanvas;
     private readonly gl: WebGL2RenderingContext;
     private readonly program: WebGLProgram;
 
     private readonly texture: WebGLTexture;
+    private readonly positionBuffer: WebGLBuffer;
+    private readonly uvBuffer: WebGLBuffer;
 
-    private readonly textureLocation: WebGLUniformLocation | null;
-    private readonly resolutionLocation: WebGLUniformLocation | null;
-    private readonly timeLocation: WebGLUniformLocation | null;
+    private textureLocation: WebGLUniformLocation | null;
+    private resolutionLocation: WebGLUniformLocation | null;
+    private timeLocation: WebGLUniformLocation | null;
+
+    private vertexImageSliceInfo: ImageSliceInfo | null;
+    private vertexShader: WebGLShader;
+    private readonly fragmentShader: WebGLShader;
 
     private readonly shaderUniforms = new Map<string, {
         info: WebGLActiveInfo;
@@ -26,7 +88,7 @@ class ShaderRenderer {
     }>();
 
     private readonly defaultShaderProperties: ShaderProperties;
-    
+
     /**
      * Serializes render calls on this renderer so concurrent frames
      * (different images, same shader) don't interleave texture upload,
@@ -39,22 +101,32 @@ class ShaderRenderer {
         gl: WebGL2RenderingContext,
         program: WebGLProgram,
         texture: WebGLTexture,
+        positionBuffer: WebGLBuffer,
+        uvBuffer: WebGLBuffer,
+        vertexImageSliceInfo: ImageSliceInfo | null,
+        vertexShader: WebGLShader,
+        fragmentShader: WebGLShader,
         defaultShaderProperties: ShaderProperties
     ) {
         this.canvas = canvas;
         this.gl = gl;
         this.program = program;
         this.texture = texture;
+        this.positionBuffer = positionBuffer;
+        this.uvBuffer = uvBuffer;
+        this.vertexShader = vertexShader;
+        this.fragmentShader = fragmentShader;
         this.defaultShaderProperties = defaultShaderProperties;
-
-        this.textureLocation = gl.getUniformLocation(program, "uTexture");
-        this.resolutionLocation = gl.getUniformLocation(program, "uResolution");
-        this.timeLocation = gl.getUniformLocation(program, "uTime");
+        this.vertexImageSliceInfo = vertexImageSliceInfo;
+        this.textureLocation = gl.getUniformLocation(program, textureUniform);
+        this.resolutionLocation = gl.getUniformLocation(program, resolutionUniform);
+        this.timeLocation = gl.getUniformLocation(program, timeUniform);
         this.cacheUniforms();
     }
 
-    // Renderer is created from the shader only — no image involved yet.
-    static async create(fragmentSource: string): Promise<ShaderRenderer> {
+    // Renderer is created from the fragment shader (+ optional vertex shader override).
+    // No image is involved yet.
+    static async create(fragmentSource: string, imageSliceInfo : ImageSliceInfo | null = null): Promise<ShaderRenderer> {
         const canvas = new OffscreenCanvas(1, 1);
 
         const gl = canvas.getContext("webgl2", {
@@ -67,33 +139,9 @@ class ShaderRenderer {
         }
 
         const defaultShaderProperties = parseShaderDefaults(fragmentSource);
-
-        function compileShader(type: number, source: string, name: string): WebGLShader {
-            if (!source) {
-                throw new Error(`${name} shader source is undefined.`);
-            }
-            if (!gl) {
-                throw new Error("No GL initialized.");
-            }
-
-            const shader = gl.createShader(type);
-            if (!shader) {
-                throw new Error(`Failed to create ${name} shader.`);
-            }
-
-            gl.shaderSource(shader, source);
-            gl.compileShader(shader);
-
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                const log = gl.getShaderInfoLog(shader);
-                throw new Error(`${name} shader compilation failed:\n${log}\n\nSource:\n${source}`);
-            }
-
-            return shader;
-        }
-
-        const vertexShader = compileShader(gl.VERTEX_SHADER, identityVertexShader, "Vertex");
-        const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fragmentSource, "Fragment");
+        const vertexSource = getVertexShaderSource(imageSliceInfo)
+        const vertexShader = compileVertexShader(gl, vertexSource);
+        const fragmentShader = compileFragmentShader(gl, fragmentSource);
 
         const program = gl.createProgram();
         if (!program) {
@@ -109,7 +157,10 @@ class ShaderRenderer {
         }
 
         gl.useProgram(program);
-        gl.deleteShader(vertexShader);
+        /* 
+            Shaders stay attached to the program, so deleteShader here only *flags* them for deletion 
+            they remain valid handles for detachShader in setVertexShader() until actually detached.
+        */
         gl.deleteShader(fragmentShader);
 
         const vertices = new Float32Array([
@@ -168,7 +219,8 @@ class ShaderRenderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
         const renderer = new ShaderRenderer(
-            canvas, gl, program, texture, defaultShaderProperties
+            canvas, gl, program, texture, positionBuffer, uvBuffer,
+            imageSliceInfo, vertexShader, fragmentShader, defaultShaderProperties
         );
 
         gl.useProgram(program);
@@ -199,12 +251,85 @@ class ShaderRenderer {
         }
     }
 
+    /**
+     * Swaps the vertex shader on this renderer's existing program and
+     * relinks, without touching the GL context, texture, canvas, or
+     * vertex buffers. Compiles the new shader BEFORE tearing down the
+     * old one, so a bad source leaves the renderer in its prior working
+     * state rather than half torn-down.
+     *
+     * Re-fetches every attribute and uniform location afterward, since
+     * relinking invalidates all of them (not just the ones affected by
+     * the vertex shader).
+     */
+    setVertexShader(newVertexSource: string): void {
+        const gl = this.gl;
+
+        const newVertexShader = compileVertexShader(gl, newVertexSource);
+
+        gl.detachShader(this.program, this.vertexShader);
+        gl.deleteShader(this.vertexShader);
+        gl.attachShader(this.program, newVertexShader);
+        gl.linkProgram(this.program);
+
+        if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+            const log = gl.getProgramInfoLog(this.program);
+            /* 
+                Relink failed - the program is now in a broken link state.
+                Put the old vertex shader back and relink to restore a working program.
+            */
+            gl.detachShader(this.program, newVertexShader);
+            gl.deleteShader(newVertexShader);
+            gl.attachShader(this.program, this.vertexShader);
+            gl.linkProgram(this.program);
+            throw new Error(`Vertex shader relink failed, reverted to previous vertex shader:\n${log}`);
+        }
+
+        this.vertexShader = newVertexShader;
+        gl.useProgram(this.program);
+
+        const positionLocation = gl.getAttribLocation(this.program, "aPosition");
+        if (positionLocation < 0) {
+            throw new Error('New vertex shader does not contain "aPosition".');
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+        gl.enableVertexAttribArray(positionLocation);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+        const uvLocation = gl.getAttribLocation(this.program, "aUv");
+        if (uvLocation < 0) {
+            throw new Error('New vertex shader does not contain "aUv".');
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.uvBuffer);
+        gl.enableVertexAttribArray(uvLocation);
+        gl.vertexAttribPointer(uvLocation, 2, gl.FLOAT, false, 0, 0);
+
+        this.textureLocation = gl.getUniformLocation(this.program, textureUniform);
+        this.resolutionLocation = gl.getUniformLocation(this.program, resolutionUniform);
+        this.timeLocation = gl.getUniformLocation(this.program, timeUniform);
+        this.shaderUniforms.clear();
+        this.cacheUniforms();
+
+        if (this.textureLocation !== null) {
+            gl.uniform1i(this.textureLocation, 0);
+        }
+
+        /* 
+            Resolution uniform location is new - re-push the current size if the canvas has already been sized by a prior uploadImage() call.
+        */
+        if (this.resolutionLocation !== null && this.canvas.width > 0 && this.canvas.height > 0) {
+            gl.uniform2f(this.resolutionLocation, this.canvas.width, this.canvas.height);
+        }
+    }
 
     /**
      * Uploads a new source image, resizing the canvas/viewport/pixel buffer and resolution uniform if the image dimensions changed.
      * @param imageBase64 image
      */
-    private async uploadImage(imageBase64: string): Promise<void> {
+    private async uploadImage(imageBase64: string, imageSliceInfo : ImageSliceInfo | null = null): Promise<void> {
+        if (!areImageSliceInfoEqual(this.vertexImageSliceInfo, imageSliceInfo)) {
+            this.setVertexShader(getVertexShaderSource(imageSliceInfo));
+        } 
         const blob = await (await fetch("data:image/png;base64," + imageBase64)).blob();
         const bitmap = await createImageBitmap(blob);
 
@@ -242,6 +367,9 @@ class ShaderRenderer {
         };
 
         for (const [property, value] of Object.entries(properties)) {
+            if (property == timeUniform || property == textureUniform || property == resolutionUniform) {
+                continue;
+            }
             try {
                 const uniform = this.shaderUniforms.get(property);
                 if (!uniform) {
@@ -280,6 +408,18 @@ class ShaderRenderer {
 
         return task;
     }
+
+    renderFrameChunk(imageChunkBase64: string, time: number, shaderProperties: ShaderProperties, imageSliceInfo : ImageSliceInfo) {
+        const task = this.queue.then(async() => {
+            await this.uploadImage(imageChunkBase64, imageSliceInfo);
+            const pixels = this.drawAndReadback(time, shaderProperties);
+            return { width: this.canvas.width, height: this.canvas.height, pixels}
+        });
+
+        // Keep the queue alive even if this task fails.
+        this.queue = task.catch(() => {});
+        return task;
+    }
 }
 
 const rendererCache = new Map<string, ShaderRenderer | Promise<ShaderRenderer>>();
@@ -311,12 +451,34 @@ export function clearShaderCache(): void {
     rendererCache.clear();
 }
 
+/**
+ * Swaps the vertex shader for an already-created renderer, keyed by the
+ * same shaderPath used to create/render it. Throws if no renderer has
+ * been created yet for that path.
+ */
+export async function setShaderVertexShader(shaderPath: string, vertexSource: string): Promise<void> {
+    const cached = rendererCache.get(shaderPath);
+    if (!cached) {
+        throw new Error(`No renderer cached for shader path "${shaderPath}". Create it first via renderShaderRaw/renderShaderBatchRaw.`);
+    }
+
+    const renderer = await cached;
+    renderer.setVertexShader(vertexSource);
+}
+
+
 export async function renderShaderRaw(args: ShaderRenderArgs): Promise<RawFrameResult> {
     const { shaderPath, imageBase64, fragmentSource, parameters } = args;
-
     const renderer = await getOrCreateRenderer(shaderPath, fragmentSource);
 
     return renderer.renderFrame(imageBase64, parameters.time, parameters.shaderProperties);
+}
+
+export async function renderShaderChunkRaw(args : ShaderChunkRenderArgs) : Promise<RawFrameResult> {
+    const { shaderPath, imageBase64, fragmentSource, parameters, imageSliceInfo } = args;
+    const renderer = await getOrCreateRenderer(shaderPath, fragmentSource);
+
+    return renderer.renderFrameChunk(imageBase64, parameters.time, parameters.shaderProperties, imageSliceInfo);
 }
 
 /**

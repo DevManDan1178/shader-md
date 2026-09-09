@@ -14,6 +14,11 @@ type ShaderInfo = {
     ShaderParameters : Record<string, any>;
 };
 
+
+// ignoreParentShaders="..." should always ignore parent shaders unless the entered string is false (for convenience)
+const parseIgnoreParentShaders = (value : string | null) => value != null && value.trim().toLowerCase() !== "false";
+
+const SHADER_LAYER_ZINDEX = -1;
 const SHADER_ID_PREFIX = "shader-";
 const SHADER_OUTPUT_CLASSNAME = "shader-output";
 
@@ -31,6 +36,7 @@ const HIDE_DESCENDANT_SHADERS_STYLE = `
         display: none !important;
     }
 `
+const SHADER_SOURCE_DATA_KEY = "shader-source";
 
 const ShaderSelectors: Record<string, string> = {
     heading1: "h1",
@@ -199,8 +205,8 @@ export function createDocumentBackground(
 export function replaceElementWithImage(
     element: HTMLElement,
     args: {
-        id: string,
-        dataUrl: string
+        id: string;
+        dataUrl: string;
     }
 ): void {
     const rect = element.getBoundingClientRect();
@@ -210,12 +216,13 @@ export function replaceElementWithImage(
 
     image.id = args.id;
     image.src = args.dataUrl;
-
-    image.style.width = rect.width + "px";
-    image.style.height = rect.height + "px";
+    image.alt = "";
 
     image.style.display = computed.display;
     image.style.verticalAlign = computed.verticalAlign;
+
+    image.style.width = `${rect.width}px`;
+    image.style.height = `${rect.height}px`;
 
     image.style.marginTop = computed.marginTop;
     image.style.marginRight = computed.marginRight;
@@ -223,9 +230,12 @@ export function replaceElementWithImage(
     image.style.marginLeft = computed.marginLeft;
 
     image.style.objectFit = "fill";
+    image.style.boxSizing = "border-box";
 
     element.replaceWith(image);
 }
+
+
 
 /**
  * @brief Finds all elements carrying a shader, shader-bg, or ignoreParentShaders attribute.
@@ -237,8 +247,9 @@ function getShaderElements(): HTMLElement[] {
     ) as HTMLElement[];
 }
 
+
 /**
- * @brief Assigns stable ids to shader elements (if missing) and builds their IdInfo.
+ * @brief Assigns stable ids to shader elements if needed and builds their IdInfo.
  * @param elements Elements to process, in the desired output order.
  * @return IdInfo entries matching the input order.
  */
@@ -259,6 +270,7 @@ function shaderElementsToIdInfo(elements: HTMLElement[]): IdInfo {
         };
     });
 }
+
 
 /**
  * @brief Gets IdInfo for all shader elements, in document order.
@@ -300,10 +312,11 @@ function getDepth(element: Element): number {
 
     return depth;
 }
+
 /**
  * @brief Creates the foreground overlay container, if it doesn't already exist.
  */
-export function createShaderLayerContainer() {
+export function createShaderLayerContainer(): void {
     if (document.getElementById(SHADER_FOREGROUND_ID)) {
         return;
     }
@@ -321,32 +334,50 @@ export function createShaderLayerContainer() {
     document.body.appendChild(foregrounds);
 }
 
+
 /**
  * @brief Creates an overlay image positioned over an element and adds it to the shader layer container.
  * @param element Element the overlay is positioned over.
  * @param args Id, data URL, depth, and layer (background/foreground) for the overlay.
  */
 export function createShaderLayer(
-    element : HTMLElement, 
+    element: HTMLElement,
     args: {
-        id: string,
-        dataUrl: string,
-        depth : number,
-        background: string,
+        id: string;
+        dataUrl: string;
+        depth: number;
+        background: boolean;
     }
-) {
+): void {
     const rect = element.getBoundingClientRect();
     const image = document.createElement("img");
 
     image.id = args.id;
     image.src = args.dataUrl;
     image.dataset.shaderSource = element.id;
+
+    // Mark this layer if its source is an ignoreParentShaders descendant.
+    if (findFirstIgnoreParentShadersAncestor(element)) {
+        image.dataset.shaderDescendant = "true";
+    }
+
     image.style.display = "block";
     image.style.objectFit = "fill";
     image.style.pointerEvents = "none";
-
+    
     if (args.background) {
         const computed = getComputedStyle(element);
+
+        // Save the original values before modifying the element.
+        if (!element.dataset.shaderPositionStored) {
+            element.dataset.shaderPositionStored = "true";
+            element.dataset.shaderPreviousPosition = element.style.position;
+        }
+
+        if (!element.dataset.shaderZIndexStored) {
+            element.dataset.shaderZIndexStored = "true";
+            element.dataset.shaderPreviousZIndex = element.style.zIndex;
+        }
 
         if (computed.position === "static") {
             element.style.position = "relative";
@@ -361,38 +392,114 @@ export function createShaderLayer(
         image.style.top = "0";
         image.style.width = "100%";
         image.style.height = "100%";
-        image.style.zIndex = "-1";
+
+        // Put the shader in layer.
+        image.style.zIndex = `${SHADER_LAYER_ZINDEX}`;
 
         element.prepend(image);
-    } else {
-        image.style.position = "absolute";
-        image.style.left = (rect.left + window.scrollX) + "px";
-        image.style.top = (rect.top + window.scrollY) + "px";
-        image.style.width = rect.width + "px";
-        image.style.height = rect.height + "px";
-        image.style.zIndex = String(args.depth);
-
-        const container = document.getElementById(SHADER_FOREGROUND_ID)!;
-        container.appendChild(image);
+        return;
     }
+
+    image.style.position = "absolute";
+    image.style.left = `${rect.left + window.scrollX}px`;
+    image.style.top = `${rect.top + window.scrollY}px`;
+    image.style.width = `${rect.width}px`;
+    image.style.height = `${rect.height}px`;
+    image.style.zIndex = String(args.depth);
+
+    const container = document.getElementById(SHADER_FOREGROUND_ID);
+
+    if (!container) {
+        throw new Error(
+            "Shader foreground container has not been created."
+        );
+    }
+    container.appendChild(image);
 }
 
+
 /**
- * @brief Returns ids of descendants marked ignoreParentShaders, to exclude from a shader screenshot.
+ * @brief Returns ids of descendants opting out of parent shaders, to exclude from a shader screenshot.
+ * An element opts out unless its ignoreParentShaders value is exactly "false" (case-insensitive).
  * @param element Element whose descendants are checked.
- * @return Ids of ignored descendants.
+ * @return Ids of opted-out descendants.
  */
-export function getDescendantsIgnoringParentShaders(element : HTMLElement) : string[] {
-    const result = [];
+export function getDescendantsIgnoringParentShaders(element: HTMLElement): string[] {
+    const result: string[] = [];
+
     const descendants = element.querySelectorAll(`[${IGNORE_PARENT_SHADERS_KEY}]`);
 
     for (const descendant of descendants) {
-        if (descendant.id) {
-            result.push(descendant.id);
+        if (!(descendant instanceof HTMLElement) || !descendant.id) {
+            continue;
         }
+
+        const ignoreParentShadersProperty = descendant.getAttribute(IGNORE_PARENT_SHADERS_KEY) ?? "";
+
+        if (!parseIgnoreParentShaders(ignoreParentShadersProperty)) {
+            continue;
+        }
+
+        result.push(descendant.id);
     }
 
     return result;
+}
+
+/**
+ * @brief Waits for every image in the document to finish loading/decoding,
+ * then two animation frames for layout to settle after that.
+ * @return Promise resolving once the page has settled.
+ */
+export function waitForImagesSettled(): Promise<void> {
+    const images = Array.from(document.images);
+    const pending = images.filter((img) => !img.complete);
+
+    const waitForImages = pending.length === 0
+        ? Promise.resolve()
+        : Promise.all(
+            pending.map((img) => new Promise<void>((resolve) => {
+                img.addEventListener("load", () => resolve(), { once: true });
+                img.addEventListener("error", () => resolve(), { once: true });
+            }))
+        );
+
+    return waitForImages.then(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+}
+
+/**
+ * @brief Re-syncs every foreground shader overlay's position/size to its source element's current layout, 
+ * correcting for any drift between capture time and final compositing. 
+ * 
+ * Background overlays are anchored inside their source element and move with it automatically. (so unnecessary)
+ */
+export function resyncShaderLayerPositions(): void {
+    const layers = document.querySelectorAll<HTMLImageElement>(`[data-${SHADER_SOURCE_DATA_KEY}]`);
+
+    for (const layer of layers) {
+        if (layer.parentElement?.id !== SHADER_FOREGROUND_ID) {
+            continue;
+        }
+
+        const sourceId = layer.dataset.shaderSource;
+        if (!sourceId) {
+            continue;
+        }
+
+        const source = document.getElementById(sourceId);
+        if (!source) {
+            continue;
+        }
+
+        const rect = source.getBoundingClientRect();
+
+        layer.style.left = `${rect.left + window.scrollX}px`;
+        layer.style.top = `${rect.top + window.scrollY}px`;
+        layer.style.width = `${rect.width}px`;
+        layer.style.height = `${rect.height}px`;
+    }
 }
 
 /**
@@ -429,7 +536,7 @@ export function setSiblingsVisible(element: HTMLElement, visible: boolean): void
 */
 export function setElementVisible(element: HTMLElement, visible: boolean): void {
     if (!visible) {
-        // Only remember the original value once.
+        // Store original visibility (once)
         if (!element.dataset.shaderPreviousVisibilityStored) {
             element.dataset.shaderPreviousVisibilityStored = "true";
             element.dataset.shaderPreviousVisibility = element.style.visibility;
@@ -439,33 +546,31 @@ export function setElementVisible(element: HTMLElement, visible: boolean): void 
         return;
     }
 
-    // Restore the original inline visibility.
+    // Restoring original visibility 
+
     if (element.dataset.shaderPreviousVisibilityStored) {
         element.style.visibility = element.dataset.shaderPreviousVisibility ?? "";
 
         delete element.dataset.shaderPreviousVisibilityStored;
         delete element.dataset.shaderPreviousVisibility;
     } else {
-        // If we didn't hide it ourselves, make it visible.
         element.style.visibility = "";
     }
 }
 
 /**
  * Sets shader overlay layers and their source elements visible or hidden.
- * [data-shader-source]
- * When hiding, the current inline visibility is saved so it can be restored when the elements are made visible again.
+ *
  * @param ids Source element ids to update.
  * @param visible Whether the elements should be visible.
- * @return Number of elements/layers hidden or shown.
+ * @return Number of unique elements/layers changed.
  */
 export function setShaderLayersVisible(ids: string[], visible: boolean): number {
-    let count = 0;
     const idSet = new Set(ids);
+    const processed = new Set<HTMLElement>();
 
-    const setVisibility = (element: HTMLElement) => {
+    const setVisibility = (element: HTMLElement): void => {
         if (!visible) {
-            // Only save the original value once.
             if (element.dataset.shaderPreviousVisibilityStored !== "true") {
                 element.dataset.shaderPreviousVisibilityStored = "true";
                 element.dataset.shaderPreviousVisibility = element.style.visibility;
@@ -475,10 +580,8 @@ export function setShaderLayersVisible(ids: string[], visible: boolean): number 
             return;
         }
 
-        // Restore the original inline visibility.
         if (element.dataset.shaderPreviousVisibilityStored === "true") {
-            element.style.visibility =
-                element.dataset.shaderPreviousVisibility ?? "";
+            element.style.visibility = element.dataset.shaderPreviousVisibility ?? "";
 
             delete element.dataset.shaderPreviousVisibility;
             delete element.dataset.shaderPreviousVisibilityStored;
@@ -486,54 +589,74 @@ export function setShaderLayersVisible(ids: string[], visible: boolean): number 
     };
 
     const layers = document.querySelectorAll(
-        "[data-shader-source]"
+        `[data-${SHADER_SOURCE_DATA_KEY}]`
     ) as NodeListOf<HTMLElement>;
 
     for (const layer of layers) {
         const source = layer.dataset.shaderSource;
+
         if (!source || !idSet.has(source)) {
             continue;
         }
 
-        setVisibility(layer);
-        count++;
-    }
-
-    for (const id of ids) {
-        const el = document.getElementById(id);
-        if (!el) {
+        if (processed.has(layer)) {
             continue;
         }
 
-        setVisibility(el);
-        count++;
+        processed.add(layer);
+        setVisibility(layer);
     }
 
-    return count;
+    for (const id of ids) {
+        const element = document.getElementById(id);
+
+        if (!element || processed.has(element)) {
+            continue;
+        }
+
+        processed.add(element);
+        setVisibility(element);
+    }
+
+    return processed.size;
+}
+
+
+
+/**
+ * @brief Hides a shaded element behind its overlay, 
+ * keeps ignoreParentShaders descendants visible instead of inheriting the hidden state.
+ * @param element Element whose shader overlay now stands in for it.
+ */
+export function hideShaderedElement(element: HTMLElement): void {
+    if (element.dataset.shaderOriginalVisibilityStored !== "true") {
+        element.dataset.shaderOriginalVisibilityStored = "true";
+        element.dataset.shaderOriginalVisibility = element.style.visibility;
+    }
+
+    element.style.visibility = "hidden";
+
+    const ignoredDescendantIds = getDescendantsIgnoringParentShaders(element);
+
+    for (const id of ignoredDescendantIds) {
+        const descendant = document.getElementById(id);
+
+        if (!descendant || descendant.dataset.shaderOriginalVisibilityStored === "true") {
+            continue;
+        }
+
+        descendant.style.visibility = "visible";
+    }
 }
 
 
 /**
- * @brief Hides an element now that its shader overlay stands in for it; un-hides
- * descendants forced invisible by the visibility:hidden cascade (e.g. ignoreParentShaders).
- * @param element Element to hide.
+ * Gets full html page string from the content html
+ * Formatting similar to Github markdown
+ * @param extraStyle extra style in <style> before the body
+ * @param pageContent page content inside the <body>
+ * @returns the full html document
  */
-export function hideOriginalElement(element : HTMLElement) {
-    element.dataset.shaderOriginalVisibility = element.style.visibility;
-    element.style.visibility = "hidden";
-
-    const descendants = element.querySelectorAll("*");
-    for (const descendant of descendants) {
-        const el = descendant as HTMLElement;
-        if (el.style.visibility !== "hidden") {
-            el.dataset.shaderForcedVisible = "true";
-            el.style.visibility = "visible";
-        }
-    }
-}
-
-
-
 function createHTMLPage(extraStyle : string, pageContent : string) : string {
     return `
         <!DOCTYPE html>
@@ -641,7 +764,7 @@ function createHTMLPage(extraStyle : string, pageContent : string) : string {
                 }
 
                 em {
-                    color: #c9d1d9;
+                    color: #e2e8ee;
                 }
 
                 /* =========================
@@ -747,15 +870,11 @@ function createHTMLPage(extraStyle : string, pageContent : string) : string {
                 ========================= */
 
                 table {
-                    width: 100%;
                     margin-top: 0;
                     margin-bottom: 16px;
 
                     border-spacing: 0;
                     border-collapse: collapse;
-
-                    display: block;
-                    overflow-x: auto;
 
                     color: #c9d1d9;
                 }
@@ -875,4 +994,28 @@ function createHTMLPage(extraStyle : string, pageContent : string) : string {
         </body>
     </html>
     `
+}
+
+
+/**
+ * @brief Finds the nearest ancestor (or self) opted into ignoreParentShaders,
+ * skipping past any ancestor whose value is exactly "false" (case-insensitive)
+ * to keep checking further up the tree.
+ * @param element Element to start searching from.
+ * @return The nearest opted-in ancestor/self, or null if none found.
+ */
+function findFirstIgnoreParentShadersAncestor(element: Element): Element | null {
+    let current: Element | null = element;
+
+    while (current) {
+        if (current.hasAttribute(IGNORE_PARENT_SHADERS_KEY)) {
+            if (parseIgnoreParentShaders(current.getAttribute(IGNORE_PARENT_SHADERS_KEY))) {
+                return current;
+            }
+        }
+
+        current = current.parentElement;
+    }
+
+    return null;
 }
