@@ -17,8 +17,8 @@ public class HTMLShaderProcessor {
     /// </summary>
     /// <param name="value"></param>
     /// <returns></returns>
-    static bool parseIgnoreParentShaders(string value) {
-        return value != null && value.Trim().ToLower() != "false";
+    static bool parseIgnoreParentShaders(string? value) {
+        return value != null && !value.Trim().ToLower().Equals("false");
     }
 
     private readonly IShaderProcessor _shaderProcessor;
