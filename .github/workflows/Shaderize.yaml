@@ -227,9 +227,19 @@ jobs:
           echo "Preparing shader configuration..."
 
           # Point the config at the repository's shaders directory.
-          sed "s|^shaders_root_directory:.*|shaders_root_directory: \"$GITHUB_WORKSPACE/shaders\"|" \
-            "$SHADER_CONFIG" > "$RUNNER_TEMP/shaderConfig.yaml"
+          awk -v shader_root="$GITHUB_WORKSPACE/docs/README/shaders" '
+            /^shaders_root_directory:[[:space:]]*$/ {
+              print
+              getline
+              print "  \"" shader_root "\""
+              next
+            }
+            { print }
+          ' "$SHADER_CONFIG" > "$RUNNER_TEMP/shaderConfig.yaml"
 
+          echo "Generated shader config:"
+          cat "$RUNNER_TEMP/shaderConfig.yaml"
+          
           mkdir -p "$(dirname "$OUTPUT_PATH")"
           mkdir -p "$OUTPUT_PATH"
 
