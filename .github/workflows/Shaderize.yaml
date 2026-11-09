@@ -1,0 +1,148 @@
+
+name: Shaderize README
+
+on:
+  workflow_dispatch:
+    inputs:
+      markdown_path:
+        description: "Markdown file to shaderize"
+        required: true
+        default: "docs/README/README.md"
+        type: string
+
+      shader_config:
+        description: "Shader-md configuration file"
+        required: true
+        default: "shaderConfig.yaml"
+        type: string
+
+      output_path:
+        description: "Output path/prefix for generated images"
+        required: true
+        default: "docs/generated/README"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: shaderize-readme
+  cancel-in-progress: false
+
+jobs:
+  shaderize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      MARKDOWN_PATH: ${{ inputs.markdown_path }}
+      SHADER_CONFIG: ${{ inputs.shader_config }}
+      OUTPUT_PATH: ${{ inputs.output_path }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build Shader-md
+        run: |
+          npm install
+
+          PROJECT="$(find . -name '*.csproj' \
+            -not -path '*/obj/*' \
+            -not -path '*/bin/*' \
+            -print -quit)"
+
+          test -n "$PROJECT"
+          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+
+          dotnet build "$PROJECT" --configuration Release
+
+      - name: Install Chromium
+        shell: pwsh
+        run: |
+          $script = Get-ChildItem -Recurse -Filter playwright.ps1 |
+            Where-Object {
+              $_.FullName -match 'bin[/\\]Release[/\\]net8\.0[/\\]'
+            } |
+            Select-Object -First 1
+
+          if (-not $script) {
+            throw "Playwright install script not found"
+          }
+
+          & $script.FullName install --with-deps chromium
+
+      - name: Render Markdown
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f "$MARKDOWN_PATH" || {
+            echo "::error::Markdown file not found: $MARKDOWN_PATH"
+            exit 1
+          }
+
+          test -f "$SHADER_CONFIG" || {
+            echo "::error::Config not found: $SHADER_CONFIG"
+            exit 1
+          }
+
+          # Use the repository's existing shader config.
+          # Set its shader root to the repository's shaders directory.
+          sed "s|^shaders_root_directory:.*|shaders_root_directory: \"$GITHUB_WORKSPACE/shaders\"|" \
+            "$SHADER_CONFIG" > "$RUNNER_TEMP/shaderConfig.yaml"
+
+          mkdir -p "$(dirname "$OUTPUT_PATH")"
+
+          # Remove previous generated slices.
+          rm -rf "$OUTPUT_PATH"
+          mkdir -p "$OUTPUT_PATH"
+
+          dotnet run \
+            --project "$PROJECT" \
+            --configuration Release \
+            --no-build \
+            -- \
+            "$MARKDOWN_PATH" \
+            --config "$RUNNER_TEMP/shaderConfig.yaml" \
+            --output "$OUTPUT_PATH" \
+            --width 1200 \
+            --fps 5 \
+            --duration 2 \
+            --reverseloop \
+            --vslices 10 \
+            --outputext WEBP \
+            --oef
+
+          test -n "$(find "$OUTPUT_PATH" -type f \
+            -name '*.webp' -print -quit)" || {
+            echo "::error::No WebP images were generated"
+            exit 1
+          }
+
+      - name: Commit generated images
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -- "$OUTPUT_PATH"
+
+          if git diff --cached --quiet; then
+            echo "Generated images are unchanged"
+            exit 0
+          fi
+
+          git commit -m "Update shaderized README"
+          git push
