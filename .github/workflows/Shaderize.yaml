@@ -41,31 +41,48 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
-
+      
+      - name: Set up Six Labors license
+        env:
+          SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SIXLABORS_LICENSE_KEY" || {
+            echo "::error::Six Labors license secret is missing"
+            exit 1
+          }
+          printf '%s' "$SIXLABORS_LICENSE_KEY" > sixlabors.lic
+      
       - name: Build Shader-md
         run: |
-          npm install
-
+          npm ci
+      
           PROJECT="$(find . -name '*.csproj' \
             -not -path '*/obj/*' \
             -not -path '*/bin/*' \
             -print -quit)"
-
-          test -n "$PROJECT"
+      
+          test -n "$PROJECT" || {
+            echo "::error::No .csproj found"
+            exit 1
+          }
+      
           echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
-
-          dotnet build "$PROJECT" --configuration Release
+      
+          dotnet build "$PROJECT" \
+            --configuration Release 
 
       - name: Install Chromium
         shell: pwsh
