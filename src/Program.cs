@@ -55,7 +55,7 @@ partial class Program {
         IOParameters paths = new () {
             Input = options.Input.FullName,
             Output = options.Output,
-            OutputExtension = (AnimatedFileExtension) options.OutputExtension!,
+            OutputExtension = options.OutputExtension,
         };
 
         ShaderConfig shaderConfig = ShaderConfig.ReadFromYAML(
