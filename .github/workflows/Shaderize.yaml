@@ -15,6 +15,12 @@ on:
         default: "docs/README/shaderConfig.yaml"
         type: string
 
+      shaders_root_directory:
+        description: "Shader directory (repository-relative or absolute path)"
+        required: true
+        default: "docs/README/shaders"
+        type: string
+
       output_path:
         description: "Directory for generated images"
         required: true
@@ -28,7 +34,7 @@ on:
         type: number
 
       height:
-        description: "Output height in pixels (0 uses automatic sizing, if supported)"
+        description: "Output height in pixels"
         required: true
         default: "0"
         type: number
@@ -72,7 +78,7 @@ on:
       output_extension:
         description: "Generated image format"
         required: true
-        default: "WEBP"
+        default: "webp"
         type: choice
         options:
           - webp
@@ -100,6 +106,7 @@ jobs:
     env:
       MARKDOWN_PATH: ${{ inputs.markdown_path }}
       SHADER_CONFIG: ${{ inputs.shader_config_path }}
+      SHADERS_ROOT_DIRECTORY: ${{ inputs.shaders_root_directory }}
       OUTPUT_PATH: ${{ inputs.output_path }}
 
       WIDTH: ${{ inputs.width }}
@@ -175,8 +182,35 @@ jobs:
 
           echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
 
+          # Build JavaScript before MSBuild evaluates content files.
+          npm run build
+
+          test -f generated/ShaderRenderer.js || {
+            echo "::error::ShaderRenderer.js was not generated"
+            exit 1
+          }
+
+          test -f generated/StaticShaderRenderer.js || {
+            echo "::error::StaticShaderRenderer.js was not generated"
+            exit 1
+          }
+
+          test -f generated/DocumentFunctions.js || {
+            echo "::error::DocumentFunctions.js was not generated"
+            exit 1
+          }
+
           dotnet build "$PROJECT" \
             --configuration Release
+
+          PROJECT_DIR="$(dirname "$PROJECT")"
+
+          test -f "$PROJECT_DIR/bin/Release/net8.0/generated/ShaderRenderer.js" || {
+            echo "::error::ShaderRenderer.js missing from .NET build output"
+            exit 1
+          }
+
+          echo "Shader-md build completed successfully!"
 
       # -----------------------------------------------
       # Install Chromium for Playwright
@@ -216,7 +250,21 @@ jobs:
             exit 1
           }
 
-          # Prevent absolute paths and common path traversal cases.
+          # Resolve the shader directory.
+          if [[ "$SHADERS_ROOT_DIRECTORY" = /* ]]; then
+            SHADER_ROOT="$SHADERS_ROOT_DIRECTORY"
+          else
+            SHADER_ROOT="$GITHUB_WORKSPACE/$SHADERS_ROOT_DIRECTORY"
+          fi
+
+          test -d "$SHADER_ROOT" || {
+            echo "::error::Shader directory not found: $SHADER_ROOT"
+            exit 1
+          }
+
+          echo "Shader directory: $SHADER_ROOT"
+
+          # Prevent unsafe output paths.
           case "$OUTPUT_PATH" in
             ""|"."|"/"|/*|..|../*|*/..|*/../*)
               echo "::error::Unsafe output path: $OUTPUT_PATH"
@@ -224,22 +272,38 @@ jobs:
               ;;
           esac
 
-          echo "Preparing shader configuration..."
+          # -------------------------------------------
+          # Generate temporary shader configuration
+          # -------------------------------------------
+          awk -v shader_root="$SHADER_ROOT" '
+            BEGIN {
+              gsub(/\047/, "\047\047", shader_root)
+            }
 
-          # Point the config at the repository's shaders directory.
-          awk -v shader_root="$GITHUB_WORKSPACE/docs/README/shaders" '
-            /^shaders_root_directory:[[:space:]]*$/ {
-              print
-              getline
-              print "  \"" shader_root "\""
+            /^shaders_root_directory:/ {
+              print "shaders_root_directory:"
+              print "  \047" shader_root "\047"
+              skip_value = 1
               next
             }
-            { print }
+
+            skip_value && /^[[:space:]]+/ {
+              skip_value = 0
+              next
+            }
+
+            {
+              skip_value = 0
+              print
+            }
           ' "$SHADER_CONFIG" > "$RUNNER_TEMP/shaderConfig.yaml"
 
-          echo "Generated shader config:"
+          echo "Generated shader configuration:"
           cat "$RUNNER_TEMP/shaderConfig.yaml"
-          
+
+          # -------------------------------------------
+          # Prepare output directory
+          # -------------------------------------------
           mkdir -p "$(dirname "$OUTPUT_PATH")"
           mkdir -p "$OUTPUT_PATH"
 
@@ -271,17 +335,24 @@ jobs:
             ARGS+=(--oef)
           fi
 
+          # -------------------------------------------
+          # Display configuration
+          # -------------------------------------------
           echo "Rendering with Shader-md..."
           echo "Markdown: $MARKDOWN_PATH"
           echo "Config: $SHADER_CONFIG"
+          echo "Shader root: $SHADER_ROOT"
           echo "Output: $OUTPUT_PATH"
           echo "Width: $WIDTH"
           echo "Height: $HEIGHT"
           echo "FPS: $FPS"
           echo "Scale: $SCALE"
           echo "Duration: $DURATION"
+          echo "Reverse loop: $REVERSE_LOOP"
+          echo "Background: ${BGCOLOR:-default}"
           echo "Vertical slices: $VERTICAL_SLICES"
           echo "Output extension: $OUTPUT_EXTENSION"
+          echo "Overwrite existing: $OVERWRITE_EXISTING"
 
           # -------------------------------------------
           # Execute Shader-md
@@ -324,5 +395,4 @@ jobs:
           fi
 
           git commit -m "Update shaderized README"
-
           git push
