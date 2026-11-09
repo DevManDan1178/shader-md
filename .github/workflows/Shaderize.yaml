@@ -1,4 +1,3 @@
-
 name: Shaderize README
 
 on:
@@ -10,17 +9,81 @@ on:
         default: "docs/README/README.md"
         type: string
 
-      shader_config:
+      shader_config_path:
         description: "Shader-md configuration file"
         required: true
-        default: "shaderConfig.yaml"
+        default: "docs/README/shaderConfig.yaml"
         type: string
 
       output_path:
-        description: "Output path/prefix for generated images"
+        description: "Directory for generated images"
         required: true
         default: "docs/generated/README"
         type: string
+
+      width:
+        description: "Output width in pixels"
+        required: true
+        default: "1200"
+        type: number
+
+      height:
+        description: "Output height in pixels (0 uses automatic sizing, if supported)"
+        required: true
+        default: "0"
+        type: number
+
+      fps:
+        description: "Frames per second"
+        required: true
+        default: "5"
+        type: number
+
+      scale:
+        description: "Render scale"
+        required: true
+        default: "1"
+        type: number
+
+      duration:
+        description: "Animation duration in seconds"
+        required: true
+        default: "2"
+        type: number
+
+      reverse_loop:
+        description: "Enable reverse looping"
+        required: true
+        default: true
+        type: boolean
+
+      bgcolor:
+        description: "Background color (leave empty for default)"
+        required: false
+        default: ""
+        type: string
+
+      vslices:
+        description: "Number of vertical slices (1 for a single output)"
+        required: true
+        default: "10"
+        type: number
+
+      output_extension:
+        description: "Generated image format"
+        required: true
+        default: "WEBP"
+        type: choice
+        options:
+          - webp
+          - png
+          - jpeg
+
+      overwrite_existing:
+        description: "Allow overwriting existing output files"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -36,54 +99,88 @@ jobs:
 
     env:
       MARKDOWN_PATH: ${{ inputs.markdown_path }}
-      SHADER_CONFIG: ${{ inputs.shader_config }}
+      SHADER_CONFIG: ${{ inputs.shader_config_path }}
       OUTPUT_PATH: ${{ inputs.output_path }}
 
+      WIDTH: ${{ inputs.width }}
+      HEIGHT: ${{ inputs.height }}
+      FPS: ${{ inputs.fps }}
+      SCALE: ${{ inputs.scale }}
+      DURATION: ${{ inputs.duration }}
+      REVERSE_LOOP: ${{ inputs.reverse_loop }}
+      BGCOLOR: ${{ inputs.bgcolor }}
+      VERTICAL_SLICES: ${{ inputs.vslices }}
+      OUTPUT_EXTENSION: ${{ inputs.output_extension }}
+      OVERWRITE_EXISTING: ${{ inputs.overwrite_existing }}
+
     steps:
+      # -----------------------------------------------
+      # Checkout
+      # -----------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      # -----------------------------------------------
+      # Set up .NET
+      # -----------------------------------------------
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
 
+      # -----------------------------------------------
+      # Set up Node.js
+      # -----------------------------------------------
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "22"
-      
+
+      # -----------------------------------------------
+      # Set up Six Labors license
+      # -----------------------------------------------
       - name: Set up Six Labors license
         env:
           SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
+
           test -n "$SIXLABORS_LICENSE_KEY" || {
             echo "::error::Six Labors license secret is missing"
             exit 1
           }
+
           printf '%s' "$SIXLABORS_LICENSE_KEY" > sixlabors.lic
-      
+
+      # -----------------------------------------------
+      # Build Shader-md
+      # -----------------------------------------------
       - name: Build Shader-md
+        shell: bash
         run: |
-          npm ci
-      
+          set -euo pipefail
+
+          npm install
+
           PROJECT="$(find . -name '*.csproj' \
             -not -path '*/obj/*' \
             -not -path '*/bin/*' \
             -print -quit)"
-      
+
           test -n "$PROJECT" || {
             echo "::error::No .csproj found"
             exit 1
           }
-      
-          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
-      
-          dotnet build "$PROJECT" \
-            --configuration Release 
 
+          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+
+          dotnet build "$PROJECT" \
+            --configuration Release
+
+      # -----------------------------------------------
+      # Install Chromium for Playwright
+      # -----------------------------------------------
       - name: Install Chromium
         shell: pwsh
         run: |
@@ -99,10 +196,15 @@ jobs:
 
           & $script.FullName install --with-deps chromium
 
+      # -----------------------------------------------
+      # Render Markdown
+      # -----------------------------------------------
       - name: Render Markdown
         shell: bash
         run: |
           set -euo pipefail
+
+          echo "Checking input files..."
 
           test -f "$MARKDOWN_PATH" || {
             echo "::error::Markdown file not found: $MARKDOWN_PATH"
@@ -110,46 +212,96 @@ jobs:
           }
 
           test -f "$SHADER_CONFIG" || {
-            echo "::error::Config not found: $SHADER_CONFIG"
+            echo "::error::Shader config not found: $SHADER_CONFIG"
             exit 1
           }
 
-          # Use the repository's existing shader config.
-          # Set its shader root to the repository's shaders directory.
+          # Prevent absolute paths and common path traversal cases.
+          case "$OUTPUT_PATH" in
+            ""|"."|"/"|/*|..|../*|*/..|*/../*)
+              echo "::error::Unsafe output path: $OUTPUT_PATH"
+              exit 1
+              ;;
+          esac
+
+          echo "Preparing shader configuration..."
+
+          # Point the config at the repository's shaders directory.
           sed "s|^shaders_root_directory:.*|shaders_root_directory: \"$GITHUB_WORKSPACE/shaders\"|" \
             "$SHADER_CONFIG" > "$RUNNER_TEMP/shaderConfig.yaml"
 
           mkdir -p "$(dirname "$OUTPUT_PATH")"
-
-          # Remove previous generated slices.
-          rm -rf "$OUTPUT_PATH"
           mkdir -p "$OUTPUT_PATH"
 
+          # -------------------------------------------
+          # Build CLI arguments
+          # -------------------------------------------
+          ARGS=(
+            "$MARKDOWN_PATH"
+            --config "$RUNNER_TEMP/shaderConfig.yaml"
+            --output "$OUTPUT_PATH"
+            --width "$WIDTH"
+            --height "$HEIGHT"
+            --fps "$FPS"
+            --scale "$SCALE"
+            --duration "$DURATION"
+            --vslices "$VERTICAL_SLICES"
+            --outputext "$OUTPUT_EXTENSION"
+          )
+
+          if [[ "$REVERSE_LOOP" == "true" ]]; then
+            ARGS+=(--reverseloop)
+          fi
+
+          if [[ -n "$BGCOLOR" ]]; then
+            ARGS+=(--bgcolor "$BGCOLOR")
+          fi
+
+          if [[ "$OVERWRITE_EXISTING" == "true" ]]; then
+            ARGS+=(--oef)
+          fi
+
+          echo "Rendering with Shader-md..."
+          echo "Markdown: $MARKDOWN_PATH"
+          echo "Config: $SHADER_CONFIG"
+          echo "Output: $OUTPUT_PATH"
+          echo "Width: $WIDTH"
+          echo "Height: $HEIGHT"
+          echo "FPS: $FPS"
+          echo "Scale: $SCALE"
+          echo "Duration: $DURATION"
+          echo "Vertical slices: $VERTICAL_SLICES"
+          echo "Output extension: $OUTPUT_EXTENSION"
+
+          # -------------------------------------------
+          # Execute Shader-md
+          # -------------------------------------------
           dotnet run \
             --project "$PROJECT" \
             --configuration Release \
             --no-build \
-            -- \
-            "$MARKDOWN_PATH" \
-            --config "$RUNNER_TEMP/shaderConfig.yaml" \
-            --output "$OUTPUT_PATH" \
-            --width 1200 \
-            --fps 5 \
-            --duration 2 \
-            --reverseloop \
-            --vslices 10 \
-            --outputext WEBP \
-            --oef
+            -- "${ARGS[@]}"
 
+          # -------------------------------------------
+          # Verify generated output
+          # -------------------------------------------
           test -n "$(find "$OUTPUT_PATH" -type f \
-            -name '*.webp' -print -quit)" || {
-            echo "::error::No WebP images were generated"
+            \( -iname "*.webp" -o -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) \
+            -print -quit)" || {
+            echo "::error::No output images were generated"
             exit 1
           }
 
+          echo "Rendering completed successfully!"
+
+      # -----------------------------------------------
+      # Commit generated images
+      # -----------------------------------------------
       - name: Commit generated images
         shell: bash
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
@@ -157,9 +309,10 @@ jobs:
           git add -- "$OUTPUT_PATH"
 
           if git diff --cached --quiet; then
-            echo "Generated images are unchanged"
+            echo "Generated images are unchanged."
             exit 0
           fi
 
           git commit -m "Update shaderized README"
+
           git push
