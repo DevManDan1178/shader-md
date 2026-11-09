@@ -19,7 +19,7 @@ public static class FileExtension {
         ? Path.GetExtension(fileName).TrimStart('.') 
         : fileName;
         
-        return stringFileExtensions.GetValueOrDefault(extension, null);
+        return stringFileExtensions.GetValueOrDefault(extension.ToLower(), null);
     }
 
     public static string? GetFileExtensionString(AnimatedFileExtension fileExtension) {
